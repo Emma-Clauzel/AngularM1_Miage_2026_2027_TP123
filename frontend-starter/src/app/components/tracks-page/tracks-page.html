@@ -6,40 +6,102 @@
   </div>
 
   <div class="grid">
-    <article class="card">
-      <h2>Importer</h2>
-      <label>Titre<input [formControl]="title" /></label>
-      <label>Fichier audio<input type="file" accept="audio/*" (change)="choose($event)" /></label>
-      <button type="button" (click)="upload()" [disabled]="!file">Envoyer</button>
+    <article class="card upload-card">
+      <h2>Importer un morceau</h2>
+      <label for="track-title">Titre</label>
+      <input id="track-title" [formControl]="title" autocomplete="off" />
+      <label for="track-audio">Fichier audio</label>
+      <input #audioInput id="track-audio" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/x-m4a" (change)="choose($event)" />
+      @if (file) {
+        <p class="file-name">Fichier choisi : {{ file.name }}</p>
+      }
+      @if (uploadError()) {
+        <p class="error" role="alert">{{ uploadError() }}</p>
+      }
+      @if (uploadSuccess()) {
+        <p class="success" role="status">{{ uploadSuccess() }}</p>
+      }
+      <button type="button" (click)="upload()" [disabled]="!file || uploadLoading() || !!uploadError()">
+        @if (uploadLoading()) { Envoi en cours… } @else { Envoyer }
+      </button>
+      @if (uploadLoading()) {
+        <div class="upload-progress" role="status" aria-live="polite">
+          @if (uploadProgress() !== null) {
+            <label for="upload-progress">Progression de l’envoi : {{ uploadProgress() }} %</label>
+            <progress id="upload-progress" max="100" [value]="uploadProgress()!">{{ uploadProgress() }}%</progress>
+          } @else {
+            <label for="upload-progress-indeterminate">Envoi en cours…</label>
+            <progress id="upload-progress-indeterminate" max="100"></progress>
+          }
+        </div>
+      }
     </article>
 
-    <article class="card">
+    <article class="card library-card">
       <div class="row">
         <h2>Mes pistes</h2>
-        <button type="button" (click)="load()">Actualiser</button>
+        <button type="button" (click)="load()" [disabled]="loading()">Actualiser</button>
       </div>
       @if (loading()) {
-        <p>Chargement…</p>
-      }
-      @for (track of tracks(); track track.id) {
-        <div class="track">
-          <div>
-            <b>{{ track.title }}</b>
-            <small>{{ track.originalName }} · {{ track.size }} Ko</small>
-          </div>
-          <button type="button" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">▶</button>
+        <p role="status" aria-live="polite">Chargement des pistes…</p>
+      } @else if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      } @else {
+        @if (deleteError()) {
+          <p class="error" role="alert">{{ deleteError() }}</p>
+        }
+        <div class="track-list">
+          @for (track of tracks(); track track.id) {
+            <article class="track-card">
+              <div class="track-details">
+                <h3>{{ track.title }}</h3>
+                <p>{{ track.originalName }}</p>
+                <dl>
+                  <div><dt>Format</dt><dd>{{ track.mimeType }}</dd></div>
+                  <div><dt>Taille</dt><dd>{{ formatSize(track.size) }}</dd></div>
+                  <div><dt>Ajouté le</dt><dd>{{ formatDate(track.createdAt) }}</dd></div>
+                </dl>
+              </div>
+              <div class="track-actions">
+                <button type="button" (click)="play(track)" [disabled]="audioLoading()" [attr.aria-label]="'Lire ' + track.title">
+                  @if (audioLoading()) { Chargement… } @else { Lire }
+                </button>
+                <button class="delete-button" type="button" (click)="requestDelete(track)" [disabled]="!!deletingTrackId()" [attr.aria-label]="'Supprimer ' + track.title" [title]="'Supprimer ' + track.title">
+                  @if (deletingTrackId() === track.id) { … } @else { 🗑 }
+                </button>
+              </div>
+            </article>
+          } @empty {
+            <p>Aucune piste sur cette page.</p>
+          }
         </div>
-      } @empty {
-        <p>Aucune piste.</p>
       }
-      <div class="pager">
-        <button type="button" (click)="go(page() - 1)" [disabled]="page() === 1">Préc.</button>
+      <div class="pager" aria-label="Pagination de la bibliothèque">
+        <button type="button" (click)="go(page() - 1)" [disabled]="loading() || page() <= 1">Précédent</button>
         <span>Page {{ page() }} / {{ pages() }}</span>
-        <button type="button" (click)="go(page() + 1)" [disabled]="page() === pages()">Suiv.</button>
+        <button type="button" (click)="go(page() + 1)" [disabled]="loading() || page() >= pages()">Suivant</button>
       </div>
+
+      @if (audioError()) {
+        <p class="error" role="alert">{{ audioError() }}</p>
+      }
       @if (audioUrl()) {
-        <audio [src]="audioUrl()" controls autoplay></audio>
+        <section class="player" aria-label="Lecteur audio">
+          <h3>Lecture en cours : {{ playingTitle() }}</h3>
+          <audio [src]="audioUrl()" controls autoplay (error)="audioPlaybackError()" aria-label="Lecteur du morceau sélectionné"></audio>
+        </section>
       }
     </article>
   </div>
+
+  <dialog #deleteDialog class="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description" (cancel)="trackPendingDeletion.set(null)">
+    <h2 id="delete-dialog-title">Confirmer la suppression</h2>
+    @if (trackPendingDeletion(); as trackToDelete) {
+      <p id="delete-dialog-description">Voulez-vous vraiment supprimer « {{ trackToDelete.title }} » ? Cette action est définitive.</p>
+    }
+    <div class="dialog-actions">
+      <button type="button" class="cancel-button" (click)="cancelDelete()">Annuler</button>
+      <button type="button" class="confirm-delete-button" (click)="confirmDelete()">Supprimer</button>
+    </div>
+  </dialog>
 </section>

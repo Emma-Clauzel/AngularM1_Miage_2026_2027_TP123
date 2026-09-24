@@ -23,7 +23,7 @@ Cet utilisateur est différent du compte utilisé pour ouvrir le site Atlas. Ouv
 
 ## 3. Autoriser la connexion réseau
 
-Dans `Network Access`, ajoutez votre adresse IP actuelle. Si Atlas le propose, rendez cette autorisation temporaire pour la durée du TP. Vous poiuvez ajouter `0.0.0.0/0`, qui autorise les tentatives depuis tout Internet. Pour une vraie application on devrait changer cela et n'autoriser que les connexions depuis votre futur front end hébergé lui aussi dans le cloud ou en local sur votre machine.
+Dans `Network Access`, ajoutez votre adresse IP actuelle. Si Atlas le propose, rendez cette autorisation temporaire pour la durée du TP. Vous pouvez ajouter `0.0.0.0/0`, qui autorise les tentatives depuis tout Internet. Pour une vraie application on devrait changer cela et n'autoriser que les connexions depuis votre futur front end hébergé lui aussi dans le cloud ou en local sur votre machine.
 
 ## 4. Récupérer l'URI Node.js
 Retournez dans le menu principal à gauche et cliquez "Database/Cluster"
@@ -49,7 +49,7 @@ IMPORTANT: juste avant le ? dans l'URI, vous ajouterez le nom de la base de donn
 Remplacez les trois marqueurs de l'URI et choisissez une valeur locale longue pour `JWT_SECRET`. Vérifiez avec `git status` que `.env` n'apparaît pas parmi les fichiers à versionner.
 
 ## 6. Tester
-
+  
 ```bash
 npm install
 npm start
