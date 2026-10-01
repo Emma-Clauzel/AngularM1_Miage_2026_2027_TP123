@@ -8,12 +8,27 @@
   <div class="grid">
     <article class="card upload-card">
       <h2>Importer un morceau</h2>
-      <label for="track-title">Titre</label>
-      <input id="track-title" [formControl]="title" autocomplete="off" />
       <label for="track-audio">Fichier audio</label>
       <input #audioInput id="track-audio" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/x-m4a" (change)="choose($event)" />
       @if (file) {
         <p class="file-name">Fichier choisi : {{ file.name }}</p>
+      }
+      @if (metadataLoading()) { <p role="status">Lecture des tags ID3…</p> }
+      @if (embeddedCoverPreview()) {
+        <figure class="import-cover-preview"><img [src]="embeddedCoverPreview()" alt="Pochette intégrée au fichier audio" /><figcaption>Pochette détectée dans les tags du fichier</figcaption></figure>
+      }
+      <label for="track-title">Titre</label>
+      <input id="track-title" maxlength="200" [formControl]="title" autocomplete="off" placeholder="Prérempli depuis les tags ID3 ou le nom du fichier" />
+      <label for="track-artist">Artiste</label>
+      <input id="track-artist" maxlength="200" [formControl]="artist" autocomplete="off" placeholder="Prérempli depuis les tags ID3 ou le nom du fichier" />
+      <label for="upload-cover-file">Image de couverture (facultative)</label>
+      <input #uploadCoverInput id="upload-cover-file" type="file" accept="image/jpeg,image/png" (change)="chooseUploadCover($event)" />
+      @if (uploadCoverFile) {
+        <p class="file-name">Couverture choisie : {{ uploadCoverFile.name }}</p>
+        <label class="rights-confirmation">
+          <input type="checkbox" [checked]="uploadCoverRightsConfirmed()" (change)="setUploadCoverRights($event)" />
+          Je confirme que j’ai le droit d’utiliser cette image.
+        </label>
       }
       @if (uploadError()) {
         <p class="error" role="alert">{{ uploadError() }}</p>
@@ -21,7 +36,7 @@
       @if (uploadSuccess()) {
         <p class="success" role="status">{{ uploadSuccess() }}</p>
       }
-      <button type="button" (click)="upload()" [disabled]="!file || uploadLoading() || !!uploadError()">
+      <button type="button" (click)="upload()" [disabled]="!file || uploadLoading() || metadataLoading() || !!uploadError() || (!!uploadCoverFile && !uploadCoverRightsConfirmed())">
         @if (uploadLoading()) { Envoi en cours… } @else { Envoyer }
       </button>
       @if (uploadLoading()) {
@@ -40,8 +55,44 @@
     <article class="card library-card">
       <div class="row">
         <h2>Mes pistes</h2>
-        <button type="button" (click)="load()" [disabled]="loading()">Actualiser</button>
+        <div class="library-actions">
+          <button class="search-toggle" type="button" (click)="toggleSearch()" [attr.aria-expanded]="searchOpen()" aria-controls="track-search" aria-label="Rechercher un morceau" title="Rechercher un morceau">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"></circle><path d="m15.5 15.5 5 5"></path></svg>
+          </button>
+          <button type="button" (click)="load()" [disabled]="loading()">Actualiser</button>
+        </div>
       </div>
+      @if (searchOpen()) {
+        <div id="track-search" class="search-panel">
+          <label for="track-search-term">Nom du morceau</label>
+          <input #searchInput id="track-search-term" type="search" placeholder="Titre ou nom du fichier" [value]="searchTerm()" (input)="updateFilter($event, 'term')" />
+          <label for="track-search-artist">Artiste</label>
+          <input id="track-search-artist" type="search" placeholder="Filtrer par artiste" [value]="artistFilter()" (input)="updateFilter($event, 'artist')" />
+          <div class="search-filters">
+            <div>
+              <label for="track-size-filter">Taille</label>
+              <select id="track-size-filter" [value]="sizeFilter()" (change)="updateFilter($event, 'size')">
+                <option value="">Toutes les tailles</option><option value="small">Moins de 2 Mo</option><option value="medium">De 2 à 10 Mo</option><option value="large">10 Mo et plus</option>
+              </select>
+            </div>
+            <div>
+              <label for="track-format-filter">Format</label>
+              <select id="track-format-filter" [value]="formatFilter()" (change)="updateFilter($event, 'format')">
+                <option value="">Tous les formats</option><option value="audio/mpeg">MP3</option><option value="audio/wav">WAV</option><option value="audio/x-wav">WAV</option><option value="audio/ogg">OGG</option><option value="audio/mp4">M4A</option><option value="audio/x-m4a">M4A</option>
+              </select>
+            </div>
+            <div>
+              <label for="track-date-from">Ajouté à partir du</label>
+              <input id="track-date-from" type="date" [value]="dateFrom()" (change)="updateFilter($event, 'from')" />
+            </div>
+            <div>
+              <label for="track-date-to">Ajouté jusqu’au</label>
+              <input id="track-date-to" type="date" [value]="dateTo()" (change)="updateFilter($event, 'to')" />
+            </div>
+          </div>
+          <p class="search-count" aria-live="polite">{{ filteredTracks().length }} résultat(s) sur cette page</p>
+        </div>
+      }
       @if (loading()) {
         <p role="status" aria-live="polite">Chargement des pistes…</p>
       } @else if (error()) {
@@ -51,10 +102,20 @@
           <p class="error" role="alert">{{ deleteError() }}</p>
         }
         <div class="track-list">
-          @for (track of tracks(); track track.id) {
+          @for (track of filteredTracks(); track track.id) {
             <article class="track-card">
               <div class="track-details">
+                <button class="cover-trigger" type="button" (click)="openCoverManager(track)" [attr.aria-label]="'Afficher ou modifier la pochette de ' + track.title" [title]="'Modifier la pochette de ' + track.title">
+                  @if (track.cover && coverImages()[track.id]) {
+                    <img class="track-cover" [src]="coverImages()[track.id]" [alt]="'Pochette de ' + track.title" />
+                  } @else {
+                    <span class="cover-placeholder" aria-hidden="true">♪</span>
+                  }
+                </button>
                 <h3>{{ track.title }}</h3>
+                @if (track.artist || track.album) {
+                  <p class="track-metadata">{{ track.artist || 'Artiste inconnu' }}@if (track.album) { · {{ track.album }} }</p>
+                }
                 <p>{{ track.originalName }}</p>
                 <dl>
                   <div><dt>Format</dt><dd>{{ track.mimeType }}</dd></div>
@@ -72,9 +133,55 @@
               </div>
             </article>
           } @empty {
-            <p>Aucune piste sur cette page.</p>
+            <p>Aucun morceau ne correspond à cette recherche sur la page actuelle.</p>
           }
         </div>
+        <dialog #coverDialog class="cover-dialog" aria-labelledby="cover-manager-title" (cancel)="closeCoverManager()">
+          @if (coverManagerTrack(); as coverTrack) {
+          <section class="cover-manager">
+            <div class="row">
+              <h3 id="cover-manager-title">Pochette — {{ coverTrack.title }}</h3>
+              <button class="cancel-button" type="button" (click)="closeCoverManager()" aria-label="Fermer la fenêtre de pochette">Fermer</button>
+            </div>
+            <p>Artiste : {{ coverTrack.artist || 'non renseigné' }} · Album : {{ coverTrack.album || 'non renseigné' }} · Année : {{ coverTrack.releaseYear || 'non renseignée' }}</p>
+            @if (coverTrack.cover) {
+              <p>Couverture actuelle — source : {{ coverTrack.cover.source }}.</p>
+              @if (!coverTrack.cover.rightsConfirmed) {
+                <p class="rights-note">Cette image vient des tags ID3 du fichier.</p>
+              }
+            }
+            <div class="cover-search-fields">
+              <label for="cover-search-title">Titre</label>
+              <input id="cover-search-title" type="search" maxlength="200" [value]="coverSearchTitle()" (input)="updateCoverSearch($event, 'title')" />
+              <label for="cover-search-artist">Artiste</label>
+              <input id="cover-search-artist" type="search" maxlength="200" [value]="coverSearchArtist()" (input)="updateCoverSearch($event, 'artist')" />
+              <label for="cover-search-album">Album</label>
+              <input id="cover-search-album" type="search" maxlength="200" [value]="coverSearchAlbum()" (input)="updateCoverSearch($event, 'album')" />
+            </div>
+            <button type="button" (click)="findCovers()" [disabled]="coverLoading() || !coverSearchTitle().trim()">
+              @if (coverLoading()) { Recherche en cours… } @else { Rechercher des pochettes sur le Web }
+            </button>
+            <p class="rights-note">La recherche utilise le titre, l’artiste et l’album saisis. Le service public MusicBrainz limite les requêtes; en cas d’échec, réessayez dans un instant.</p>
+            @if (coverSuggestions().length) {
+              <div class="cover-suggestions" aria-label="Pochettes proposées">
+                @for (suggestion of coverSuggestions(); track suggestion.releaseId + suggestion.imageId) {
+                  <article class="cover-suggestion">
+                    <img [src]="suggestion.imageUrl" [alt]="'Pochette proposée : ' + suggestion.title + ' de ' + suggestion.artist" />
+                    <p><strong>{{ suggestion.title }}</strong><br />{{ suggestion.artist }} @if (suggestion.date) { · {{ suggestion.date }} }<br />Pertinence : {{ suggestion.score }} / 165</p>
+                    <button type="button" (click)="selectCover(suggestion)" [disabled]="!coverRightsConfirmed() || coverSaving()">Utiliser cette image</button>
+                  </article>
+                }
+              </div>
+            }
+            <div class="cover-upload">
+              <label for="cover-file">Ou importer une image (JPEG ou PNG, 5 Mo max.)</label>
+              <input id="cover-file" type="file" accept="image/jpeg,image/png" (change)="chooseCover($event)" />
+              @if (coverFile) { <p>Image choisie : {{ coverFile.name }}</p> }
+              <button type="button" (click)="uploadCover()" [disabled]="!coverFile || !coverRightsConfirmed() || coverSaving()">Enregistrer l’image importée</button>
+            </div>
+          </section>
+          }
+        </dialog>
       }
       <div class="pager" aria-label="Pagination de la bibliothèque">
         <button type="button" (click)="go(page() - 1)" [disabled]="loading() || page() <= 1">Précédent</button>

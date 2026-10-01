@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpEventType } from '@angular/common/http';
-import { Component, ElementRef, inject, OnDestroy, signal, ViewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, OnDestroy, signal, ViewChild } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { Track } from '../../shared/models/track.model';
+import { CoverSuggestion, Track } from '../../shared/models/track.model';
 import { TrackService } from '../../shared/services/track.service';
 
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024;
@@ -23,7 +23,10 @@ export class TracksPageComponent implements OnDestroy {
   private readonly service = inject(TrackService);
 
   @ViewChild('audioInput') private audioInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('uploadCoverInput') private uploadCoverInput?: ElementRef<HTMLInputElement>;
   @ViewChild('deleteDialog') private deleteDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('coverDialog') private coverDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
 
   readonly tracks = signal<Track[]>([]);
   readonly page = signal(1);
@@ -34,6 +37,8 @@ export class TracksPageComponent implements OnDestroy {
   readonly uploadProgress = signal<number | null>(null);
   readonly uploadError = signal('');
   readonly uploadSuccess = signal('');
+  readonly metadataLoading = signal(false);
+  readonly embeddedCoverPreview = signal('');
   readonly audioUrl = signal('');
   readonly audioLoading = signal(false);
   readonly audioError = signal('');
@@ -42,7 +47,46 @@ export class TracksPageComponent implements OnDestroy {
   readonly deletingTrackId = signal('');
   readonly deleteError = signal('');
   readonly trackPendingDeletion = signal<Track | null>(null);
+  readonly coverImages = signal<Record<string, string>>({});
+  readonly coverManagerTrack = signal<Track | null>(null);
+  readonly coverSuggestions = signal<CoverSuggestion[]>([]);
+  readonly coverLoading = signal(false);
+  readonly coverSaving = signal(false);
+  readonly coverError = signal('');
+  readonly coverRightsConfirmed = signal(false);
+  readonly coverSearchTitle = signal('');
+  readonly coverSearchArtist = signal('');
+  readonly coverSearchAlbum = signal('');
+  readonly uploadCoverRightsConfirmed = signal(false);
+  uploadCoverFile?: File;
+  coverFile?: File;
+  readonly searchOpen = signal(false);
+  readonly searchTerm = signal('');
+  readonly artistFilter = signal('');
+  readonly sizeFilter = signal('');
+  readonly formatFilter = signal('');
+  readonly dateFrom = signal('');
+  readonly dateTo = signal('');
+  readonly filteredTracks = computed(() => {
+    const term = this.searchTerm().trim().toLocaleLowerCase('fr');
+    const artist = this.artistFilter().trim().toLocaleLowerCase('fr');
+    const sizeFilter = this.sizeFilter();
+    const format = this.formatFilter();
+    const from = this.dateFrom();
+    const to = this.dateTo();
+    return this.tracks().filter((track) => {
+      const matchesTerm = !term || `${track.title} ${track.originalName}`.toLocaleLowerCase('fr').includes(term);
+      const matchesArtist = !artist || (track.artist ?? '').toLocaleLowerCase('fr').includes(artist);
+      const sizeMb = track.size / (1024 * 1024);
+      const matchesSize = !sizeFilter || (sizeFilter === 'small' ? sizeMb < 2 : sizeFilter === 'medium' ? sizeMb >= 2 && sizeMb < 10 : sizeMb >= 10);
+      const trackDate = new Date(track.createdAt).toISOString().slice(0, 10);
+      const matchesDate = (!from || trackDate >= from) && (!to || trackDate <= to);
+      const matchesFormat = !format || track.mimeType === format;
+      return matchesTerm && matchesArtist && matchesSize && matchesDate && matchesFormat;
+    });
+  });
   readonly title = new FormControl('', { nonNullable: true });
+  readonly artist = new FormControl('', { nonNullable: true });
   file?: File;
 
   constructor() {
@@ -54,6 +98,26 @@ export class TracksPageComponent implements OnDestroy {
     this.file = input.files?.[0];
     this.uploadError.set(this.file ? this.validateFile(this.file) : '');
     this.uploadSuccess.set('');
+    this.title.setValue('');
+    this.artist.setValue('');
+    this.embeddedCoverPreview.set('');
+    if (this.file && !this.uploadError()) {
+      const selectedFile = this.file;
+      this.metadataLoading.set(true);
+      this.service.inspectAudio(selectedFile).subscribe({
+        next: (metadata) => {
+          if (this.file !== selectedFile) { this.metadataLoading.set(false); return; }
+          this.title.setValue(metadata.title);
+          this.artist.setValue(metadata.artist);
+          this.embeddedCoverPreview.set(metadata.embeddedCoverDataUrl);
+          this.metadataLoading.set(false);
+        },
+        error: (error: unknown) => {
+          console.warn('[TracksPage] Prélecture des métadonnées impossible', error);
+          this.metadataLoading.set(false);
+        },
+      });
+    }
     console.debug('[TracksPage] Fichier sélectionné', this.file?.name);
   }
 
@@ -65,6 +129,9 @@ export class TracksPageComponent implements OnDestroy {
         console.debug('[TracksPage] Pistes chargées', response.items.length);
         this.tracks.set(response.items);
         this.pages.set(response.pages);
+        for (const url of Object.values(this.coverImages())) URL.revokeObjectURL(url);
+        this.coverImages.set({});
+        response.items.filter((track) => !!track.cover).forEach((track) => this.loadCover(track));
         this.loading.set(false);
       },
       error: (error: unknown) => {
@@ -81,8 +148,172 @@ export class TracksPageComponent implements OnDestroy {
     this.load();
   }
 
+  toggleSearch(): void {
+    this.searchOpen.update((open) => !open);
+    if (!this.searchOpen()) this.clearSearch();
+    else setTimeout(() => this.searchInput?.nativeElement.focus());
+  }
+
+  clearSearch(): void {
+    this.searchTerm.set('');
+    this.artistFilter.set('');
+    this.sizeFilter.set('');
+    this.formatFilter.set('');
+    this.dateFrom.set('');
+    this.dateTo.set('');
+  }
+
+  updateFilter(event: Event, filter: 'term' | 'artist' | 'size' | 'format' | 'from' | 'to'): void {
+    const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
+    if (filter === 'term') this.searchTerm.set(value);
+    else if (filter === 'artist') this.artistFilter.set(value);
+    else if (filter === 'size') this.sizeFilter.set(value);
+    else if (filter === 'format') this.formatFilter.set(value);
+    else if (filter === 'from') this.dateFrom.set(value);
+    else this.dateTo.set(value);
+  }
+
+  openCoverManager(track: Track): void {
+    this.coverManagerTrack.set(track);
+    this.coverSuggestions.set([]);
+    this.coverError.set('');
+    this.coverRightsConfirmed.set(false);
+    this.coverFile = undefined;
+    this.coverSearchTitle.set(track.title);
+    this.coverSearchArtist.set(track.artist ?? '');
+    this.coverSearchAlbum.set(track.album ?? '');
+    this.coverDialog?.nativeElement.showModal();
+  }
+
+  closeCoverManager(): void {
+    if (this.coverDialog?.nativeElement.open) this.coverDialog.nativeElement.close();
+    this.coverManagerTrack.set(null);
+    this.coverSuggestions.set([]);
+    this.coverError.set('');
+    this.coverRightsConfirmed.set(false);
+    this.coverFile = undefined;
+  }
+
+  updateCoverSearch(event: Event, field: 'title' | 'artist' | 'album'): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (field === 'title') this.coverSearchTitle.set(value);
+    else if (field === 'artist') this.coverSearchArtist.set(value);
+    else this.coverSearchAlbum.set(value);
+  }
+
+  findCovers(): void {
+    const track = this.coverManagerTrack();
+    if (!track || this.coverLoading()) return;
+    this.coverLoading.set(true);
+    this.coverError.set('');
+    this.service.coverSuggestions(track.id, {
+      title: this.coverSearchTitle().trim(),
+      artist: this.coverSearchArtist().trim(),
+      album: this.coverSearchAlbum().trim(),
+    }).subscribe({
+      next: (response) => {
+        this.coverSuggestions.set(response.suggestions);
+        this.coverLoading.set(false);
+        if (!response.suggestions.length) this.coverError.set('Aucune pochette trouvée. Essayez un autre titre, artiste ou album.');
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Recherche de pochettes impossible', error);
+        this.coverError.set(this.serverMessage(error, 'La recherche de pochettes est indisponible. Réessayez.'));
+        this.coverLoading.set(false);
+      },
+    });
+  }
+
+  setCoverRights(event: Event): void {
+    this.coverRightsConfirmed.set((event.target as HTMLInputElement).checked);
+  }
+
+  chooseCover(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    this.coverFile = file;
+    this.coverError.set('');
+    if (file && (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+      this.coverFile = undefined;
+      this.coverError.set('Choisissez une image JPEG ou PNG de 5 Mo maximum.');
+    }
+  }
+
+  chooseUploadCover(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    this.uploadCoverFile = file;
+    this.uploadError.set('');
+    this.uploadCoverRightsConfirmed.set(false);
+    if (file && (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+      this.uploadCoverFile = undefined;
+      input.value = '';
+      this.uploadError.set('Choisissez une image JPEG ou PNG de 5 Mo maximum.');
+    }
+  }
+
+  setUploadCoverRights(event: Event): void {
+    this.uploadCoverRightsConfirmed.set((event.target as HTMLInputElement).checked);
+  }
+
+  uploadCover(): void {
+    const track = this.coverManagerTrack();
+    if (!track || !this.coverFile || !this.coverRightsConfirmed() || this.coverSaving()) return;
+    this.coverSaving.set(true);
+    this.coverError.set('');
+    this.service.uploadCover(track.id, this.coverFile).subscribe({
+      next: (updated) => this.coverSaved(updated),
+      error: (error: unknown) => {
+        console.error('[TracksPage] Import de couverture impossible', error);
+        this.coverError.set(this.serverMessage(error, 'Impossible d’enregistrer cette image.'));
+        this.coverSaving.set(false);
+      },
+    });
+  }
+
+  selectCover(suggestion: CoverSuggestion): void {
+    const track = this.coverManagerTrack();
+    if (!track || !this.coverRightsConfirmed() || this.coverSaving()) return;
+    this.coverSaving.set(true);
+    this.coverError.set('');
+    this.service.selectCover(track.id, suggestion).subscribe({
+      next: (updated) => this.coverSaved(updated),
+      error: (error: unknown) => {
+        console.error('[TracksPage] Enregistrement de pochette impossible', error);
+        this.coverError.set(this.serverMessage(error, 'Impossible d’enregistrer cette pochette.'));
+        this.coverSaving.set(false);
+      },
+    });
+  }
+
+  private coverSaved(updated: Track): void {
+    console.debug('[TracksPage] Pochette enregistrée', updated.id);
+    this.tracks.update((tracks) => tracks.map((track) => track.id === updated.id ? updated : track));
+    this.loadCover(updated);
+    this.coverSaving.set(false);
+    this.coverManagerTrack.set(updated);
+    this.coverFile = undefined;
+    this.coverRightsConfirmed.set(false);
+    this.coverError.set('Pochette enregistrée.');
+  }
+
+  private loadCover(track: Track): void {
+    this.service.cover(track.id).subscribe({
+      next: (blob) => {
+        const previous = this.coverImages()[track.id];
+        if (previous) URL.revokeObjectURL(previous);
+        this.coverImages.update((images) => ({ ...images, [track.id]: URL.createObjectURL(blob) }));
+      },
+      error: (error: unknown) => console.error('[TracksPage] Chargement de la pochette impossible', track.id, error),
+    });
+  }
+
   upload(): void {
     if (!this.file || this.uploadLoading()) return;
+    if (this.uploadCoverFile && !this.uploadCoverRightsConfirmed()) {
+      this.uploadError.set('Confirmez que vous avez le droit d’utiliser cette image de couverture.');
+      return;
+    }
 
     const validationError = this.validateFile(this.file);
     if (validationError) {
@@ -95,9 +326,10 @@ export class TracksPageComponent implements OnDestroy {
     this.uploadLoading.set(true);
     this.uploadProgress.set(null);
     const selectedFile = this.file;
-    const trackTitle = this.title.value.trim() || selectedFile.name;
+    const trackTitle = this.title.value.trim();
+    const trackArtist = this.artist.value.trim();
 
-    this.service.upload(selectedFile, trackTitle).subscribe({
+    this.service.upload(selectedFile, trackTitle, trackArtist).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress) {
           const total = event.total;
@@ -109,13 +341,37 @@ export class TracksPageComponent implements OnDestroy {
           const track = event.body;
           console.debug('[TracksPage] Piste envoyée', track.id);
           this.uploadProgress.set(100);
-          this.uploadSuccess.set(`« ${track.title} » a été importé avec succès.`);
           this.title.setValue('');
+          this.artist.setValue('');
+          this.embeddedCoverPreview.set('');
           this.file = undefined;
           if (this.audioInput) this.audioInput.nativeElement.value = '';
           this.page.set(1);
-          this.uploadLoading.set(false);
-          this.load();
+          const coverFile = this.uploadCoverFile;
+          if (coverFile) {
+            this.uploadProgress.set(null);
+            this.service.uploadCover(track.id, coverFile).subscribe({
+              next: () => {
+                this.uploadSuccess.set(`« ${track.title} » et sa couverture ont été importés avec succès.`);
+                this.uploadCoverFile = undefined;
+                if (this.uploadCoverInput) this.uploadCoverInput.nativeElement.value = '';
+                this.uploadCoverRightsConfirmed.set(false);
+                this.uploadLoading.set(false);
+                this.load();
+              },
+              error: (coverError: unknown) => {
+                console.error('[TracksPage] Audio importé, mais couverture non enregistrée', coverError);
+                this.uploadError.set(`Le morceau « ${track.title} » est importé, mais sa couverture n’a pas été enregistrée. Vous pourrez la réessayer en cliquant sur sa pochette.`);
+                this.uploadLoading.set(false);
+                this.load();
+              },
+            });
+          } else {
+            this.uploadProgress.set(100);
+            this.uploadSuccess.set(`« ${track.title} » a été importé avec succès.`);
+            this.uploadLoading.set(false);
+            this.load();
+          }
         }
       },
       error: (error: unknown) => {
@@ -202,6 +458,7 @@ export class TracksPageComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.revokeAudioUrl();
+    for (const url of Object.values(this.coverImages())) URL.revokeObjectURL(url);
   }
 
   private validateFile(file: File): string {

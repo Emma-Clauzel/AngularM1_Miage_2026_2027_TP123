@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Page } from '../models/page.model';
-import { Track } from '../models/track.model';
+import { CoverSuggestion, Track } from '../models/track.model';
 
 /** Encapsulates all HTTP operations for backing tracks. */
 @Injectable({ providedIn: 'root' })
@@ -14,10 +14,17 @@ export class TrackService {
     });
   }
 
-  upload(file: File, title: string) {
+  inspectAudio(file: File) {
     const body = new FormData();
     body.append('audio', file);
-    body.append('title', title);
+    return this.http.post<{ title: string; artist: string; album: string; releaseYear: string; embeddedCoverDataUrl: string }>('/api/tracks/metadata', body);
+  }
+
+  upload(file: File, title: string, artist: string) {
+    const body = new FormData();
+    body.append('audio', file);
+    if (title.trim()) body.append('title', title.trim());
+    if (artist.trim()) body.append('artist', artist.trim());
     return this.http.post<Track>('/api/tracks', body, {
       observe: 'events',
       reportProgress: true,
@@ -28,6 +35,29 @@ export class TrackService {
     return this.http.get(`/api/tracks/${id}/audio`, {
       responseType: 'blob',
     });
+  }
+
+  cover(id: string) {
+    return this.http.get(`/api/tracks/${id}/cover`, { responseType: 'blob' });
+  }
+
+  coverSuggestions(id: string, metadata: { title: string; artist: string; album: string }) {
+    return this.http.get<{ metadata: { title: string; artist: string; album: string; releaseYear: string }; suggestions: CoverSuggestion[] }>(`/api/tracks/${id}/cover-suggestions`, { params: metadata });
+  }
+
+  selectCover(id: string, suggestion: CoverSuggestion) {
+    return this.http.post<Track>(`/api/tracks/${id}/cover/select`, {
+      releaseId: suggestion.releaseId,
+      imageId: suggestion.imageId,
+      rightsConfirmed: true,
+    });
+  }
+
+  uploadCover(id: string, file: File) {
+    const body = new FormData();
+    body.append('cover', file);
+    body.append('rightsConfirmed', 'true');
+    return this.http.post<Track>(`/api/tracks/${id}/cover/upload`, body);
   }
 
   delete(id: string) {

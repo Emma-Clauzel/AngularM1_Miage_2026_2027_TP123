@@ -6,17 +6,21 @@ import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { parseFile } from "music-metadata";
 import { User } from "./models/User.js";
 import { Track } from "./models/Track.js";
+import { downloadCover, findCoverSuggestions, saveCoverBytes } from "./cover-service.js";
 
 // Les fichiers audio restent sur le disque du serveur dans ce TP.
 // MongoDB ne conserve que leurs métadonnées : titre, nom, taille, etc.
 const UPLOADS = path.resolve("data/uploads");
+const COVERS = path.resolve("data/covers");
 
 try {
   // mkdirSync est utilisé au démarrage : l'application doit disposer de ce
   // dossier avant de pouvoir accepter le premier upload.
   fs.mkdirSync(UPLOADS, { recursive: true });
+  fs.mkdirSync(COVERS, { recursive: true });
   console.log(`[startup] Dossier des uploads prêt : ${UPLOADS}`);
 } catch (error) {
   console.error("[startup] Impossible de créer le dossier des uploads", error);
@@ -39,6 +43,29 @@ const allowed = new Set([
   "audio/mp4",
   "audio/x-m4a",
 ]);
+
+function filenameMetadata(originalName) {
+  const baseName = path.parse(originalName).name.trim().slice(0, 200);
+  const split = baseName.match(/^(.{1,100}?)\s[-–—]\s(.{1,150})$/u);
+  if (!split) return { title: cleanFilenameTitle(baseName), artist: "" };
+
+  const hasVideoLabel = /\b(?:official\s+)?(?:music\s+)?(?:video|audio|lyrics?|visuali[sz]er)\b/i.test(split[1]);
+  const first = cleanFilenameTitle(split[1]);
+  const second = cleanFilenameTitle(split[2]);
+  // Many exported music videos use "Title (Official Music Video) - Artist";
+  // keep the first side as the title when that explicit label is present.
+  return hasVideoLabel
+    ? { title: first, artist: second }
+    : { title: second, artist: first };
+}
+
+function cleanFilenameTitle(value) {
+  return value
+    .replace(/\s*[([{]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|lyrics?|visuali[sz]er)[^\])}]*[\])}]\s*/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+}
 
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
@@ -119,6 +146,8 @@ const upload = multer({
   },
 });
 
+const coverUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
 /**
  * Construit l'application Express sans ouvrir de port.
  * Cette séparation permet au serveur réel et aux tests de créer la même
@@ -148,6 +177,46 @@ export function createApp() {
   // accessible via req.body.
   // Il est placé avant les routes pour que toutes les requêtes JSON soient traitées.
   app.use(express.json());
+
+  // Prélecture sans création de piste : les tags ID3 et la pochette intégrée
+  // alimentent le formulaire d'import dès que l'utilisateur choisit son audio.
+  app.post("/api/tracks/metadata", auth, upload.single("audio"), async (req, res, next) => {
+    if (!req.file) return res.status(400).json({ message: "Fichier audio requis" });
+    let embeddedCoverDataUrl = "";
+    try {
+      const fallback = filenameMetadata(req.file.originalname);
+      let metadata = { title: fallback.title, artist: fallback.artist, album: "", releaseYear: "" };
+      try {
+        const parsed = await parseFile(req.file.path, { skipCovers: false });
+        metadata = {
+          title: cleanFilenameTitle(String(parsed.common.title ?? "")) || fallback.title,
+          artist: String(parsed.common.artist ?? "").trim().slice(0, 200) || fallback.artist,
+          album: String(parsed.common.album ?? "").slice(0, 200),
+          releaseYear: parsed.common.year ? String(parsed.common.year).slice(0, 10) : "",
+        };
+        const picture = parsed.common.picture?.find((item) => item.type === "Cover (front)") ?? parsed.common.picture?.[0];
+        if (picture?.data) {
+          let saved;
+          try {
+            saved = await saveCoverBytes(COVERS, Buffer.from(picture.data));
+            const bytes = await fsPromises.readFile(path.join(COVERS, saved.storedName));
+            embeddedCoverDataUrl = `data:${saved.mimeType};base64,${bytes.toString("base64")}`;
+          } catch (error) {
+            console.warn("[tracks] Pochette intégrée ignorée pendant la prélecture", error.message);
+          } finally {
+            if (saved) await fsPromises.unlink(path.join(COVERS, saved.storedName)).catch(() => {});
+          }
+        }
+      } catch (error) {
+        console.warn("[tracks] Tags audio illisibles pendant la prélecture", error.message);
+      }
+      res.json({ ...metadata, embeddedCoverDataUrl });
+    } catch (error) {
+      next(error);
+    } finally {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+    }
+  });
 
   /** Endpoint public utilisé pour vérifier que l'API répond. */
   app.get("/api/health", (_req, res) => {
@@ -297,10 +366,15 @@ export function createApp() {
       // L'identifiant MongoDB (_id) est converti en chaîne de caractères (id) pour être plus lisible 
       // côté frontend.
       // Le champ _id (généré par MongoDB) est supprimé pour éviter de l'exposer dans la réponse JSON.
-      const publicItems = items.map((track) => ({
+      const publicItems = items.map(({ _id, ownerId, cover, __v, ...track }) => ({
         ...track,
-        id: String(track._id),
-        _id: undefined,
+        id: String(_id),
+        cover: cover?.storedName ? {
+          mimeType: cover.mimeType,
+          source: cover.source,
+          sourceUrl: cover.sourceUrl,
+          rightsConfirmed: cover.rightsConfirmed,
+        } : null,
       }));
 
       console.log(`[tracks] ${publicItems.length} piste(s) envoyée(s) sur ${total}`);
@@ -336,19 +410,58 @@ export function createApp() {
     auth,
     upload.single("audio"),
     async (req, res, next) => {
+      let embeddedCoverName = "";
+      let embeddedCoverMime = "";
       try {
         if (!req.file) {
           console.warn(`[tracks] Upload sans fichier par ${req.auth.sub}`);
           return res.status(400).json({ message: "Fichier audio requis" });
         }
+        if (typeof req.body?.title === "string" && req.body.title.trim().length > 200) {
+          await fsPromises.unlink(path.join(UPLOADS, req.file.filename));
+          return res.status(400).json({ message: "Le titre ne peut pas dépasser 200 caractères." });
+        }
+
+        const fromFilename = filenameMetadata(req.file.originalname);
+        if (typeof req.body?.artist === "string" && req.body.artist.trim().length > 200) {
+          await fsPromises.unlink(path.join(UPLOADS, req.file.filename));
+          return res.status(400).json({ message: "Le nom de l’artiste ne peut pas dépasser 200 caractères." });
+        }
+        let audioMetadata = {};
+        try {
+          const parsed = await parseFile(req.file.path, { skipCovers: false });
+          audioMetadata = {
+            title: cleanFilenameTitle(String(parsed.common.title ?? "")) || fromFilename.title,
+            artist: String(parsed.common.artist ?? "").trim().slice(0, 200) || fromFilename.artist,
+            album: String(parsed.common.album ?? "").slice(0, 200),
+            releaseYear: parsed.common.year ? String(parsed.common.year).slice(0, 10) : "",
+          };
+          const picture = parsed.common.picture?.find((item) => item.type === "Cover (front)")
+            ?? parsed.common.picture?.[0];
+          if (picture?.data) {
+            try {
+              const saved = await saveCoverBytes(COVERS, Buffer.from(picture.data));
+              embeddedCoverName = saved.storedName;
+              embeddedCoverMime = saved.mimeType;
+            } catch (coverError) {
+              console.warn(`[tracks] Image intégrée ignorée pour ${req.file.filename}`, coverError.message);
+            }
+          }
+        } catch (metadataError) {
+          console.warn(`[tracks] Tags audio illisibles pour ${req.file.filename}`, metadataError.message);
+        }
 
         const track = await Track.create({
           ownerId: req.auth.sub,
-          title: req.body.title || req.file.originalname,
+          title: (typeof req.body.title === "string" ? req.body.title.trim() : "") || audioMetadata.title || fromFilename.title,
           originalName: req.file.originalname,
           storedName: req.file.filename,
           mimeType: req.file.mimetype,
           size: req.file.size,
+          artist: (typeof req.body.artist === "string" ? req.body.artist.trim() : "") || audioMetadata.artist || fromFilename.artist,
+          album: audioMetadata.album,
+          releaseYear: audioMetadata.releaseYear,
+          ...(embeddedCoverName ? { cover: { storedName: embeddedCoverName, mimeType: embeddedCoverMime, source: "embedded" } } : {}),
         });
 
         console.log(`[tracks] Upload enregistré : ${track.id}`);
@@ -370,12 +483,95 @@ export function createApp() {
             );
           }
         }
+        if (embeddedCoverName) {
+          try {
+            await fsPromises.unlink(path.join(COVERS, embeddedCoverName));
+          } catch (cleanupError) {
+            console.error("[tracks] Nettoyage de la pochette intégrée impossible", cleanupError);
+          }
+        }
         next(error);
       }
     },
   );
 
   /** Envoie le contenu binaire d'une piste après vérification de sa propriété. */
+  app.get("/api/tracks/:id/cover-suggestions", auth, async (req, res, next) => {
+    try {
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue" });
+      const queryValue = (value, fallback) => typeof value === "string" ? value.trim().slice(0, 200) : fallback;
+      const searchMetadata = {
+        title: queryValue(req.query.title, track.title),
+        artist: queryValue(req.query.artist, track.artist ?? ""),
+        album: queryValue(req.query.album, track.album ?? ""),
+        releaseYear: track.releaseYear ?? "",
+      };
+      if (!searchMetadata.title) return res.status(400).json({ message: "Saisissez un titre pour rechercher une pochette." });
+      const suggestions = await findCoverSuggestions(searchMetadata);
+      res.json({ metadata: searchMetadata, suggestions });
+    } catch (error) {
+      console.error("[cover-search] Recherche de pochettes impossible", error);
+      res.status(502).json({ message: "Le service de recherche de pochettes est momentanément indisponible." });
+    }
+  });
+
+  app.post("/api/tracks/:id/cover/select", auth, async (req, res, next) => {
+    let newCoverName = "";
+    try {
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue" });
+      const { releaseId, imageId, rightsConfirmed } = req.body ?? {};
+      if (rightsConfirmed !== true) return res.status(400).json({ message: "Confirmez que vous avez le droit d'utiliser cette image." });
+      const downloaded = await downloadCover(COVERS, releaseId, imageId);
+      newCoverName = downloaded.storedName;
+      const oldCoverName = track.cover?.storedName;
+      track.cover = { storedName: downloaded.storedName, mimeType: downloaded.mimeType, source: "cover-art-archive", sourceUrl: downloaded.sourceUrl, rightsConfirmed: true };
+      await track.save();
+      if (oldCoverName) await fsPromises.unlink(path.join(COVERS, oldCoverName)).catch((error) => console.warn("[cover] Ancienne image non supprimée", error.message));
+      res.json(track.toPublic());
+    } catch (error) {
+      if (newCoverName) await fsPromises.unlink(path.join(COVERS, newCoverName)).catch((cleanupError) => console.error("[cover] Nettoyage impossible", cleanupError));
+      console.error("[cover] Sélection de pochette impossible", error);
+      if (/invalide|refusé|volumineuse|image JPEG|Dimensions/.test(error.message)) return res.status(400).json({ message: error.message });
+      next(error);
+    }
+  });
+
+  app.post("/api/tracks/:id/cover/upload", auth, coverUpload.single("cover"), async (req, res, next) => {
+    let newCoverName = "";
+    try {
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue" });
+      if (!req.file) return res.status(400).json({ message: "Image de couverture requise" });
+      if (req.body?.rightsConfirmed !== "true") return res.status(400).json({ message: "Confirmez que vous avez le droit d'utiliser cette image." });
+      const saved = await saveCoverBytes(COVERS, req.file.buffer);
+      newCoverName = saved.storedName;
+      const oldCoverName = track.cover?.storedName;
+      track.cover = { storedName: saved.storedName, mimeType: saved.mimeType, source: "upload", rightsConfirmed: true };
+      await track.save();
+      if (oldCoverName) await fsPromises.unlink(path.join(COVERS, oldCoverName)).catch((error) => console.warn("[cover] Ancienne image non supprimée", error.message));
+      res.json(track.toPublic());
+    } catch (error) {
+      if (newCoverName) await fsPromises.unlink(path.join(COVERS, newCoverName)).catch((cleanupError) => console.error("[cover] Nettoyage impossible", cleanupError));
+      if (/Image non valide|volumineuse|Dimensions/.test(error.message)) return res.status(400).json({ message: error.message });
+      console.error("[cover] Envoi de pochette impossible", error);
+      next(error);
+    }
+  });
+
+  app.get("/api/tracks/:id/cover", auth, async (req, res, next) => {
+    try {
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track?.cover?.storedName) return res.status(404).json({ message: "Pochette inconnue" });
+      res.type(track.cover.mimeType).set({ "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" });
+      res.sendFile(path.join(COVERS, track.cover.storedName), (error) => { if (error && !res.headersSent) next(error); });
+    } catch (error) {
+      console.error("[cover] Lecture de pochette impossible", error);
+      next(error);
+    }
+  });
+
   app.get("/api/tracks/:id/audio", auth, async (req, res, next) => {
     try {
       const track = await Track.findOne({
@@ -429,6 +625,10 @@ export function createApp() {
         return res.status(500).json({
           message: "Métadonnée supprimée, mais fichier audio non supprimé",
         });
+      }
+
+      if (track.cover?.storedName) {
+        await fsPromises.unlink(path.join(COVERS, track.cover.storedName)).catch((error) => console.warn("[tracks] Suppression de la pochette impossible", error.message));
       }
 
       res.status(204).end();

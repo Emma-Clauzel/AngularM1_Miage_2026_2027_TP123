@@ -13,11 +13,21 @@ const schema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    title: { type: String, required: true, trim: true },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
     originalName: { type: String, required: true },
     storedName: { type: String, required: true, select: false },
     mimeType: { type: String, required: true },
     size: { type: Number, required: true, min: 0 },
+    artist: { type: String, trim: true, default: "", maxlength: 200 },
+    album: { type: String, trim: true, default: "", maxlength: 200 },
+    releaseYear: { type: String, trim: true, default: "", maxlength: 10 },
+    cover: {
+      storedName: { type: String, default: "" },
+      mimeType: { type: String, default: "" },
+      source: { type: String, enum: ["embedded", "upload", "cover-art-archive", ""], default: "" },
+      sourceUrl: { type: String, default: "" },
+      rightsConfirmed: { type: Boolean, default: false },
+    },
   },
   { timestamps: true },
 );
@@ -39,6 +49,15 @@ schema.methods.toPublic = function () {
     mimeType: this.mimeType,
     size: this.size,
     createdAt: this.createdAt,
+    artist: this.artist,
+    album: this.album,
+    releaseYear: this.releaseYear,
+    cover: this.cover?.storedName ? {
+      mimeType: this.cover.mimeType,
+      source: this.cover.source,
+      sourceUrl: this.cover.sourceUrl,
+      rightsConfirmed: this.cover.rightsConfirmed,
+    } : null,
   };
 };
 
