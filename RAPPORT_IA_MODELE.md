@@ -136,3 +136,61 @@ Pour chaque mission, consigner l'objectif, le prompt principal, le plan, les vé
 - **Changements :** suppression des champs de credit et licence dans le formulaire, le service, le schema public du modele et les routes de couverture. La confirmation d’utilisation de l’image reste presente. Les tags ID3 non vides sont prioritaires et les etiquettes descriptives comme « Official Music Video » sont retirees du titre. Pour un nom contenant explicitement ce marqueur avant le tiret, la partie avant le tiret devient le titre et celle apres devient l’artiste. Le fichier `récap TP2.docx` est ignore par Git dans `.gitignore`.
 - **Exemple attendu :** `The Emptiness Machine (Official Music Video) - Linkin Park.mp3` donne le titre `The Emptiness Machine` et l’artiste `Linkin Park`, sauf si les tags ID3 contiennent de meilleures valeurs.
 - **Verification :** compilation Angular et verification syntaxique backend a relancer; la premiere compilation de ce suivi a rencontre une erreur d’acces au dossier du projet dans le compilateur Angular.
+
+## TP3 - Retours de l'interface
+
+### Ajustement - Selection des pochettes
+
+- **Demande :** reparer le bouton « Utiliser cette image » et fermer la fenetre apres validation.
+- **Diagnostic :** le bouton etait desactive tant que `coverRightsConfirmed` etait faux, mais la fenetre de recherche ne contenait pas la case de confirmation necessaire. Les retours de l'enregistrement n'etaient pas non plus presentes dans le template.
+- **Changements :** ajout de la case de confirmation des droits dans la fenetre et affichage de l'etat de succes/erreur. La fenetre se ferme maintenant apres l'enregistrement reussi; elle reste ouverte en cas d'echec.
+- **Fichiers modifies :** `frontend-starter/src/app/components/tracks-page/tracks-page.html` et `tracks-page.ts`.
+- **Verification :** parcours navigateur et compilation a confirmer.
+
+### Amelioration - SnackBars pour suppression et ajout de musique
+
+- **Demande :** afficher une notification « Suppression réussie » ou « Suppression échouée », et une notification « Musique ajoutée » ou « La musique n'a pas pu être ajoutée ».
+- **Plan :** reutiliser les flux existants du composant et du `TrackService`; afficher une notification temporaire accessible, avec un style distinct pour succes et erreur.
+- **Changements :** notification temporaire fixe en bas de l'ecran, masquee apres 3,5 secondes. La suppression signale le resultat de la reponse DELETE. L'ajout signale le resultat de la creation audio; si l'ajout audio reussit mais que la couverture facultative echoue, la notification confirme l'ajout du morceau et le message detaille existant signale l'echec de la couverture.
+- **Fichiers modifies :** `frontend-starter/src/app/components/tracks-page/tracks-page.ts`, `tracks-page.html` et `tracks-page.css`.
+- **Verifications realisees :** `npm.cmd run build` dans `frontend-starter` a reussi le 8 octobre 2026. A verifier manuellement avec le backend actif : suppression avec succes et erreur, ajout valide et erreur serveur, et expiration du message.
+- **Preuve de fonctionnement :** le build Angular confirme la compilation du composant, du template et des styles. Le parcours navigateur reste a confirmer.
+- **Ce que chaque membre sait maintenant expliquer sans l'agent :** comment le composant determine succes/erreur a partir des callbacks HTTP, comment les signaux pilotent l'apparition de la notification, et comment le delai est nettoye a la destruction du composant.
+
+### Amelioration - Pourcentages de progression
+
+- **Demande :** afficher un pourcentage pour l'ajout d'un son, la recherche de pochettes Web et l'utilisation d'une image proposee.
+- **Plan :** conserver les evenements HTTP d'upload pour afficher la progression mesuree quand le navigateur fournit le total; afficher une estimation pour les operations qui ne renvoient qu'une reponse finale.
+- **Changements :** l'ajout audio demarre a 0 % et utilise les evenements de televersement lorsqu'ils sont disponibles; sans total, un pourcentage estime avance jusqu'a 95 %. La recherche Web et la selection de couverture affichent une progression estimee, plafonnee a 95 % pendant l'attente puis terminee a 100 % a la reponse. Les libelles precisent quand le pourcentage est estime; les minuteurs s'arretent apres succes, erreur ou destruction du composant.
+- **Fichiers modifies :** `frontend-starter/src/app/components/tracks-page/tracks-page.ts`, `tracks-page.html` et `tracks-page.css`.
+- **Verification realisee :** `npm.cmd run build` dans `frontend-starter` a reussi le 8 octobre 2026. Le comportement visuel et le parcours avec MusicBrainz/Cover Art Archive restent a verifier dans le navigateur.
+- **Limite a expliquer :** le serveur traite la recherche et la recuperation de la couverture avant de renvoyer une reponse finale; le frontend ne recoit aucun evenement d'avancement de ces etapes. Le pourcentage correspondant est donc une estimation d'attente, pas une mesure du telechargement serveur.
+- **Ce que chaque membre sait maintenant expliquer sans l'agent :** pourquoi `HttpClient` peut mesurer les octets d'un upload, pourquoi les requetes de recherche et de selection n'exposent pas leur progression interne, et pourquoi leur indicateur est marque comme estime.
+
+### Ajustement visuel - Barres de progression
+
+- **Demande :** rendre les barres plus visibles, plus épaisses et cohérentes avec les tons roses du site.
+- **Changements :** hauteur portée à 1,35 rem, piste rose pâle, remplissage dégradé rose et bordeaux, bords arrondis et transition douce. Le même style s’applique à l’upload audio et aux progressions estimées des pochettes.
+- **Fichier modifié :** `frontend-starter/src/app/components/tracks-page/tracks-page.css`.
+- **Vérification :** `npm.cmd run build` dans `frontend-starter` a réussi le 8 octobre 2026; rendu navigateur à vérifier.
+
+## TP3 - Mission 7 - Tests automatisés
+
+- **Objectif :** ajouter les tests ciblés du frontend et étendre les tests de contrat/sécurité du backend sans supprimer ceux déjà présents.
+- **Choix d’exécution frontend :** Vitest avec jsdom et le TestBed Angular. Le builder `ng test` n’a pas pu résoudre les chemins de fichiers du projet dans cet environnement Windows; `npm test` lance donc Vitest directement.
+- **Tests frontend ajoutés :** connexion `POST /api/auth/login` et corps envoyé; pagination `page`/`limit`; ajout du header Bearer par l’intercepteur; redirection `/login` par le guard sans token; mise à jour du signal d’erreur après échec HTTP; suppression `DELETE` puis rechargement `GET`; upload multipart, progression HTTP mesurée, réussite et erreur.
+- **Tests backend ajoutés :** `401` sans JWT; `401` avec JWT invalide; upload sans fichier; refus de type MIME; pagination avec paramètres appliqués à la requête; refus de suppression d’une piste qui ne correspond pas au propriétaire authentifié. Les méthodes Mongoose sont simulées pour les tests de pagination et de propriété; aucun serveur MongoDB n’est requis.
+- **Résultats attendus et observés :** login = POST et corps email/mot de passe conformes; liste = GET avec page/limit; intercepteur = Bearer présent; guard = URL `/login`; erreur HTTP = annonce visible dans le template; suppression = DELETE puis GET de rechargement; upload = multipart, progression 50 % simulée et état final/erreur. Backend = 401, 400, 200 et 404 attendus pour les six cas correspondants. Toutes les assertions passent.
+- **Fichiers modifiés :** `frontend-starter/package.json` et `package-lock.json` (Vitest, jsdom et types Node); `frontend-starter/angular.json`, `tsconfig.app.json`, `tsconfig.spec.json`, `vitest.config.ts`, `src/test-setup.ts`; tests `services.spec.ts`, `auth.guard.spec.ts`, `tracks-page.spec.ts`; `backend/test/api.test.js`.
+- **Résultats :** `npm test` frontend : 8 réussis, 0 échec; `npx tsc --noEmit --project tsconfig.spec.json` : réussi; `npm test` backend : 8 réussis, 0 échec; `npm run build` frontend : réussi le 8 octobre 2026.
+- **À vérifier manuellement :** captures de l’onglet Network pour DELETE et upload/progression, et console du navigateur sans erreur inattendue ni donnée sensible. Ces vérifications nécessitent l’application démarrée et ne sont pas simulées par les tests unitaires.
+- **Notions à expliquer :** services HTTP isolés par `HttpTestingController`; injection de token par l’intercepteur; route protégée par le guard; test unitaire sans base de données grâce aux réponses HTTP simulées et aux méthodes Mongoose remplacées; différence entre test unitaire et intégration.
+
+## TP3 - Préparation à la restitution orale
+
+1. **Pourquoi la suppression passe-t-elle par un service ?** Le composant appelle TrackService.delete(id), qui centralise la requête DELETE /api/tracks/:id. Le composant gère l’interface; le service porte l’URL et la méthode HTTP. Cette séparation facilite la réutilisation et les tests avec HttpTestingController.
+2. **Comment le backend protège-t-il la suppression ?** La route exige un JWT valide. Le middleware place l’identifiant du compte dans req.auth.sub; la requête filtre sur _id et ownerId. Une piste d’un autre compte n’est pas supprimée (réponse 404).
+3. **Comment Angular calcule-t-il le pourcentage d’upload ?** reportProgress et les événements HTTP donnent loaded et total dans UploadProgress; le pourcentage est loaded / total × 100. Sans total, l’interface estime l’attente jusqu’à 95 %, puis passe à 100 % sur réponse réussie. Les pochettes utilisent une estimation, car le serveur n’expose pas l’avancement interne.
+4. **Pourquoi les tests HTTP n’ont-ils pas besoin de MongoDB ?** Les tests frontend interceptent les réponses avec HttpTestingController; les tests backend remplacent les méthodes Mongoose ciblées. Ils contrôlent statuts, filtres et réponses sans base réelle, mais ne valident pas une instance MongoDB en production.
+5. **Que vérifie un test d’intercepteur ou de guard ?** Le test d’intercepteur contrôle l’ajout de Authorization: Bearer avec le jeton. Celui du guard vérifie qu’un utilisateur sans jeton ne peut pas entrer sur la route protégée et est redirigé vers /login.
+6. **Quelle différence existe entre un test unitaire et un test d’intégration ?** Le test unitaire vérifie un élément isolé avec ses dépendances remplacées. Le test d’intégration vérifie plusieurs éléments ensemble, par exemple frontend, route Express et base de données. Les tests simulés de ce TP couvrent les contrats ciblés, pas un parcours complet avec MongoDB.

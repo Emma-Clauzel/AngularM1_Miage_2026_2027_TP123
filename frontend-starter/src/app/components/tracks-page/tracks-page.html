@@ -42,7 +42,7 @@
       @if (uploadLoading()) {
         <div class="upload-progress" role="status" aria-live="polite">
           @if (uploadProgress() !== null) {
-            <label for="upload-progress">Progression de l’envoi : {{ uploadProgress() }} %</label>
+            <label for="upload-progress">{{ uploadProgressEstimated() ? 'Progression estimée de l’envoi' : 'Progression de l’envoi' }} : {{ uploadProgress() }} %</label>
             <progress id="upload-progress" max="100" [value]="uploadProgress()!">{{ uploadProgress() }}%</progress>
           } @else {
             <label for="upload-progress-indeterminate">Envoi en cours…</label>
@@ -144,6 +144,13 @@
               <button class="cancel-button" type="button" (click)="closeCoverManager()" aria-label="Fermer la fenêtre de pochette">Fermer</button>
             </div>
             <p>Artiste : {{ coverTrack.artist || 'non renseigné' }} · Album : {{ coverTrack.album || 'non renseigné' }} · Année : {{ coverTrack.releaseYear || 'non renseignée' }}</p>
+            <label class="rights-confirmation">
+              <input type="checkbox" [checked]="coverRightsConfirmed()" (change)="setCoverRights($event)" />
+              Je confirme que j’ai le droit d’utiliser cette image.
+            </label>
+            @if (coverError()) {
+              <p [class.error]="!coverError().startsWith('Pochette enregistrée.')" [class.success]="coverError().startsWith('Pochette enregistrée.')" role="status">{{ coverError() }}</p>
+            }
             @if (coverTrack.cover) {
               <p>Couverture actuelle — source : {{ coverTrack.cover.source }}.</p>
               @if (!coverTrack.cover.rightsConfirmed) {
@@ -161,6 +168,12 @@
             <button type="button" (click)="findCovers()" [disabled]="coverLoading() || !coverSearchTitle().trim()">
               @if (coverLoading()) { Recherche en cours… } @else { Rechercher des pochettes sur le Web }
             </button>
+            @if (coverLoading() || coverSearchProgress() === 100) {
+              <div class="cover-progress" role="status" aria-live="polite">
+                <label for="cover-search-progress">Progression estimée de la recherche : {{ coverSearchProgress() }} %</label>
+                <progress id="cover-search-progress" max="100" [value]="coverSearchProgress()">{{ coverSearchProgress() }}%</progress>
+              </div>
+            }
             <p class="rights-note">La recherche utilise le titre, l’artiste et l’album saisis. Le service public MusicBrainz limite les requêtes; en cas d’échec, réessayez dans un instant.</p>
             @if (coverSuggestions().length) {
               <div class="cover-suggestions" aria-label="Pochettes proposées">
@@ -169,6 +182,12 @@
                     <img [src]="suggestion.imageUrl" [alt]="'Pochette proposée : ' + suggestion.title + ' de ' + suggestion.artist" />
                     <p><strong>{{ suggestion.title }}</strong><br />{{ suggestion.artist }} @if (suggestion.date) { · {{ suggestion.date }} }<br />Pertinence : {{ suggestion.score }} / 165</p>
                     <button type="button" (click)="selectCover(suggestion)" [disabled]="!coverRightsConfirmed() || coverSaving()">Utiliser cette image</button>
+                    @if (coverSaving() && coverSavingAction() === 'select' && selectedCoverKey() === suggestion.releaseId + suggestion.imageId) {
+                      <div class="cover-progress" role="status" aria-live="polite">
+                        <label [for]="'cover-selection-progress-' + suggestion.imageId">Enregistrement estimé : {{ coverSelectionProgress() }} %</label>
+                        <progress [id]="'cover-selection-progress-' + suggestion.imageId" max="100" [value]="coverSelectionProgress()">{{ coverSelectionProgress() }}%</progress>
+                      </div>
+                    }
                   </article>
                 }
               </div>
@@ -211,4 +230,9 @@
       <button type="button" class="confirm-delete-button" (click)="confirmDelete()">Supprimer</button>
     </div>
   </dialog>
+  @if (snackbarMessage()) {
+    <div class="snackbar" [class.snackbar-error]="snackbarType() === 'error'" [class.snackbar-success]="snackbarType() === 'success'" [attr.role]="snackbarType() === 'error' ? 'alert' : 'status'" [attr.aria-live]="snackbarType() === 'error' ? 'assertive' : 'polite'">
+      {{ snackbarMessage() }}
+    </div>
+  }
 </section>

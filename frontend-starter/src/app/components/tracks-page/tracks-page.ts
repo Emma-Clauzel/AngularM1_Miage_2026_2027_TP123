@@ -1,5 +1,5 @@
 import { HttpErrorResponse, HttpEventType } from '@angular/common/http';
-import { Component, computed, ElementRef, inject, OnDestroy, signal, ViewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, OnDestroy, signal, ViewChild, WritableSignal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { CoverSuggestion, Track } from '../../shared/models/track.model';
 import { TrackService } from '../../shared/services/track.service';
@@ -35,6 +35,7 @@ export class TracksPageComponent implements OnDestroy {
   readonly error = signal('');
   readonly uploadLoading = signal(false);
   readonly uploadProgress = signal<number | null>(null);
+  readonly uploadProgressEstimated = signal(false);
   readonly uploadError = signal('');
   readonly uploadSuccess = signal('');
   readonly metadataLoading = signal(false);
@@ -51,15 +52,26 @@ export class TracksPageComponent implements OnDestroy {
   readonly coverManagerTrack = signal<Track | null>(null);
   readonly coverSuggestions = signal<CoverSuggestion[]>([]);
   readonly coverLoading = signal(false);
+  readonly coverSearchProgress = signal(0);
   readonly coverSaving = signal(false);
+  readonly coverSavingAction = signal<'select' | 'upload' | null>(null);
+  readonly coverSelectionProgress = signal(0);
+  readonly selectedCoverKey = signal('');
   readonly coverError = signal('');
   readonly coverRightsConfirmed = signal(false);
+  readonly snackbarMessage = signal('');
+  readonly snackbarType = signal<'success' | 'error'>('success');
   readonly coverSearchTitle = signal('');
   readonly coverSearchArtist = signal('');
   readonly coverSearchAlbum = signal('');
   readonly uploadCoverRightsConfirmed = signal(false);
   uploadCoverFile?: File;
   coverFile?: File;
+  private snackbarTimer?: ReturnType<typeof setTimeout>;
+  private uploadProgressTimer?: ReturnType<typeof setInterval>;
+  private coverSearchProgressTimer?: ReturnType<typeof setInterval>;
+  private coverSearchResetTimer?: ReturnType<typeof setTimeout>;
+  private coverSelectionProgressTimer?: ReturnType<typeof setInterval>;
   readonly searchOpen = signal(false);
   readonly searchTerm = signal('');
   readonly artistFilter = signal('');
@@ -176,6 +188,10 @@ export class TracksPageComponent implements OnDestroy {
   openCoverManager(track: Track): void {
     this.coverManagerTrack.set(track);
     this.coverSuggestions.set([]);
+    this.selectedCoverKey.set('');
+    this.coverSearchProgress.set(0);
+    this.coverSelectionProgress.set(0);
+    if (this.coverSearchResetTimer) clearTimeout(this.coverSearchResetTimer);
     this.coverError.set('');
     this.coverRightsConfirmed.set(false);
     this.coverFile = undefined;
@@ -192,6 +208,7 @@ export class TracksPageComponent implements OnDestroy {
     this.coverError.set('');
     this.coverRightsConfirmed.set(false);
     this.coverFile = undefined;
+    this.selectedCoverKey.set('');
   }
 
   updateCoverSearch(event: Event, field: 'title' | 'artist' | 'album'): void {
@@ -205,6 +222,9 @@ export class TracksPageComponent implements OnDestroy {
     const track = this.coverManagerTrack();
     if (!track || this.coverLoading()) return;
     this.coverLoading.set(true);
+    this.coverSearchProgress.set(0);
+    if (this.coverSearchResetTimer) clearTimeout(this.coverSearchResetTimer);
+    this.coverSearchProgressTimer = this.startEstimatedProgress(this.coverSearchProgress);
     this.coverError.set('');
     this.service.coverSuggestions(track.id, {
       title: this.coverSearchTitle().trim(),
@@ -213,11 +233,21 @@ export class TracksPageComponent implements OnDestroy {
     }).subscribe({
       next: (response) => {
         this.coverSuggestions.set(response.suggestions);
+        this.stopEstimatedProgress(this.coverSearchProgressTimer);
+        this.coverSearchProgressTimer = undefined;
+        this.coverSearchProgress.set(100);
         this.coverLoading.set(false);
+        this.coverSearchResetTimer = setTimeout(() => {
+          this.coverSearchProgress.set(0);
+          this.coverSearchResetTimer = undefined;
+        }, 900);
         if (!response.suggestions.length) this.coverError.set('Aucune pochette trouvée. Essayez un autre titre, artiste ou album.');
       },
       error: (error: unknown) => {
         console.error('[TracksPage] Recherche de pochettes impossible', error);
+        this.stopEstimatedProgress(this.coverSearchProgressTimer);
+        this.coverSearchProgressTimer = undefined;
+        this.coverSearchProgress.set(0);
         this.coverError.set(this.serverMessage(error, 'La recherche de pochettes est indisponible. Réessayez.'));
         this.coverLoading.set(false);
       },
@@ -260,6 +290,7 @@ export class TracksPageComponent implements OnDestroy {
     const track = this.coverManagerTrack();
     if (!track || !this.coverFile || !this.coverRightsConfirmed() || this.coverSaving()) return;
     this.coverSaving.set(true);
+    this.coverSavingAction.set('upload');
     this.coverError.set('');
     this.service.uploadCover(track.id, this.coverFile).subscribe({
       next: (updated) => this.coverSaved(updated),
@@ -267,6 +298,7 @@ export class TracksPageComponent implements OnDestroy {
         console.error('[TracksPage] Import de couverture impossible', error);
         this.coverError.set(this.serverMessage(error, 'Impossible d’enregistrer cette image.'));
         this.coverSaving.set(false);
+        this.coverSavingAction.set(null);
       },
     });
   }
@@ -275,13 +307,22 @@ export class TracksPageComponent implements OnDestroy {
     const track = this.coverManagerTrack();
     if (!track || !this.coverRightsConfirmed() || this.coverSaving()) return;
     this.coverSaving.set(true);
+    this.coverSavingAction.set('select');
+    this.selectedCoverKey.set(suggestion.releaseId + suggestion.imageId);
+    this.coverSelectionProgress.set(0);
+    this.coverSelectionProgressTimer = this.startEstimatedProgress(this.coverSelectionProgress);
     this.coverError.set('');
     this.service.selectCover(track.id, suggestion).subscribe({
       next: (updated) => this.coverSaved(updated),
       error: (error: unknown) => {
         console.error('[TracksPage] Enregistrement de pochette impossible', error);
+        this.stopEstimatedProgress(this.coverSelectionProgressTimer);
+        this.coverSelectionProgressTimer = undefined;
+        this.coverSelectionProgress.set(0);
         this.coverError.set(this.serverMessage(error, 'Impossible d’enregistrer cette pochette.'));
         this.coverSaving.set(false);
+        this.coverSavingAction.set(null);
+        this.selectedCoverKey.set('');
       },
     });
   }
@@ -290,11 +331,18 @@ export class TracksPageComponent implements OnDestroy {
     console.debug('[TracksPage] Pochette enregistrée', updated.id);
     this.tracks.update((tracks) => tracks.map((track) => track.id === updated.id ? updated : track));
     this.loadCover(updated);
+    if (this.coverSavingAction() === 'select') {
+      this.stopEstimatedProgress(this.coverSelectionProgressTimer);
+      this.coverSelectionProgressTimer = undefined;
+      this.coverSelectionProgress.set(100);
+    }
     this.coverSaving.set(false);
+    this.coverSavingAction.set(null);
+    this.selectedCoverKey.set('');
     this.coverManagerTrack.set(updated);
     this.coverFile = undefined;
     this.coverRightsConfirmed.set(false);
-    this.coverError.set('Pochette enregistrée.');
+    this.closeCoverManager();
   }
 
   private loadCover(track: Track): void {
@@ -312,19 +360,25 @@ export class TracksPageComponent implements OnDestroy {
     if (!this.file || this.uploadLoading()) return;
     if (this.uploadCoverFile && !this.uploadCoverRightsConfirmed()) {
       this.uploadError.set('Confirmez que vous avez le droit d’utiliser cette image de couverture.');
+      this.showSnackbar('La musique n\'a pas pu être ajoutée', 'error');
       return;
     }
 
     const validationError = this.validateFile(this.file);
     if (validationError) {
       this.uploadError.set(validationError);
+      this.showSnackbar('La musique n\'a pas pu être ajoutée', 'error');
       return;
     }
 
     this.uploadError.set('');
     this.uploadSuccess.set('');
     this.uploadLoading.set(true);
-    this.uploadProgress.set(null);
+    this.uploadProgressEstimated.set(true);
+    this.uploadProgress.set(0);
+    this.uploadProgressTimer = setInterval(() => {
+      this.uploadProgress.update((value) => Math.min(95, (value ?? 0) + 5));
+    }, 350);
     const selectedFile = this.file;
     const trackTitle = this.title.value.trim();
     const trackArtist = this.artist.value.trim();
@@ -333,13 +387,26 @@ export class TracksPageComponent implements OnDestroy {
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress) {
           const total = event.total;
-          this.uploadProgress.set(total ? Math.round((event.loaded / total) * 100) : null);
+          if (total) {
+            this.stopEstimatedProgress(this.uploadProgressTimer);
+            this.uploadProgressTimer = undefined;
+            this.uploadProgressEstimated.set(false);
+            this.uploadProgress.set(Math.round((event.loaded / total) * 100));
+          } else {
+            this.uploadProgressEstimated.set(true);
+            const estimatedFromBytes = Math.min(95, Math.round((event.loaded / selectedFile.size) * 100));
+            this.uploadProgress.update((current) => Math.max(current ?? 0, estimatedFromBytes));
+          }
           return;
         }
 
         if (event.type === HttpEventType.Response && event.body) {
           const track = event.body;
           console.debug('[TracksPage] Piste envoyée', track.id);
+          this.showSnackbar('Musique ajoutée', 'success');
+          this.stopEstimatedProgress(this.uploadProgressTimer);
+          this.uploadProgressTimer = undefined;
+          this.uploadProgressEstimated.set(false);
           this.uploadProgress.set(100);
           this.title.setValue('');
           this.artist.setValue('');
@@ -377,6 +444,10 @@ export class TracksPageComponent implements OnDestroy {
       error: (error: unknown) => {
         console.error('[TracksPage] Envoi impossible', error);
         this.uploadError.set(this.serverMessage(error, 'L’import a échoué. Vérifiez le fichier et réessayez.'));
+        this.showSnackbar('La musique n\'a pas pu être ajoutée', 'error');
+        this.stopEstimatedProgress(this.uploadProgressTimer);
+        this.uploadProgressTimer = undefined;
+        this.uploadProgressEstimated.set(false);
         this.uploadLoading.set(false);
         this.uploadProgress.set(null);
       },
@@ -434,11 +505,13 @@ export class TracksPageComponent implements OnDestroy {
 
         if (this.tracks().length === 1 && this.page() > 1) this.page.update((page) => page - 1);
         this.deletingTrackId.set('');
+        this.showSnackbar('Suppression réussie', 'success');
         this.load();
       },
       error: (error: unknown) => {
         console.error('[TracksPage] Suppression impossible', error);
         this.deleteError.set(this.serverMessage(error, 'Impossible de supprimer cette piste. Réessayez.'));
+        this.showSnackbar('Suppression échouée', 'error');
         this.deletingTrackId.set('');
       },
     });
@@ -457,6 +530,11 @@ export class TracksPageComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.snackbarTimer) clearTimeout(this.snackbarTimer);
+    this.stopEstimatedProgress(this.uploadProgressTimer);
+    this.stopEstimatedProgress(this.coverSearchProgressTimer);
+    this.stopEstimatedProgress(this.coverSelectionProgressTimer);
+    if (this.coverSearchResetTimer) clearTimeout(this.coverSearchResetTimer);
     this.revokeAudioUrl();
     for (const url of Object.values(this.coverImages())) URL.revokeObjectURL(url);
   }
@@ -478,6 +556,21 @@ export class TracksPageComponent implements OnDestroy {
       if (error.status === 413) return 'Le fichier dépasse la taille maximale autorisée de 25 Mo.';
     }
     return fallback;
+  }
+
+  private showSnackbar(message: string, type: 'success' | 'error'): void {
+    if (this.snackbarTimer) clearTimeout(this.snackbarTimer);
+    this.snackbarMessage.set(message);
+    this.snackbarType.set(type);
+    this.snackbarTimer = setTimeout(() => this.snackbarMessage.set(''), 3500);
+  }
+
+  private startEstimatedProgress(progress: WritableSignal<number>): ReturnType<typeof setInterval> {
+    return setInterval(() => progress.update((value) => Math.min(95, value + 5)), 350);
+  }
+
+  private stopEstimatedProgress(timer?: ReturnType<typeof setInterval>): void {
+    if (timer) clearInterval(timer);
   }
 
   private revokeAudioUrl(): void {
