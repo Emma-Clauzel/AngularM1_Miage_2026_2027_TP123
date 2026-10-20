@@ -1,8 +1,9 @@
 import { HttpErrorResponse, HttpEventType } from '@angular/common/http';
-import { Component, computed, ElementRef, inject, OnDestroy, signal, ViewChild, WritableSignal } from '@angular/core';
+import { Component, computed, effect, ElementRef, inject, OnDestroy, signal, ViewChild, WritableSignal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { CoverSuggestion, Track } from '../../shared/models/track.model';
 import { TrackService } from '../../shared/services/track.service';
+import { MusicPlayerService } from '../../shared/services/music-player.service';
 
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024;
 const ALLOWED_AUDIO_TYPES = new Set([
@@ -21,6 +22,7 @@ const ALLOWED_AUDIO_TYPES = new Set([
 })
 export class TracksPageComponent implements OnDestroy {
   private readonly service = inject(TrackService);
+  readonly player = inject(MusicPlayerService);
 
   @ViewChild('audioInput') private audioInput?: ElementRef<HTMLInputElement>;
   @ViewChild('uploadCoverInput') private uploadCoverInput?: ElementRef<HTMLInputElement>;
@@ -40,11 +42,6 @@ export class TracksPageComponent implements OnDestroy {
   readonly uploadSuccess = signal('');
   readonly metadataLoading = signal(false);
   readonly embeddedCoverPreview = signal('');
-  readonly audioUrl = signal('');
-  readonly audioLoading = signal(false);
-  readonly audioError = signal('');
-  readonly playingTitle = signal('');
-  readonly playingTrackId = signal('');
   readonly deletingTrackId = signal('');
   readonly deleteError = signal('');
   readonly trackPendingDeletion = signal<Track | null>(null);
@@ -102,6 +99,7 @@ export class TracksPageComponent implements OnDestroy {
   file?: File;
 
   constructor() {
+    effect(() => this.player.setQueue(this.filteredTracks()));
     this.load();
   }
 
@@ -455,24 +453,7 @@ export class TracksPageComponent implements OnDestroy {
   }
 
   play(track: Track): void {
-    if (this.audioLoading()) return;
-    this.audioLoading.set(true);
-    this.audioError.set('');
-    this.service.audio(track.id).subscribe({
-      next: (blob) => {
-        console.debug('[TracksPage] Audio chargé', track.id);
-        this.revokeAudioUrl();
-        this.audioUrl.set(URL.createObjectURL(blob));
-        this.playingTitle.set(track.title);
-        this.playingTrackId.set(track.id);
-        this.audioLoading.set(false);
-      },
-      error: (error: unknown) => {
-        console.error('[TracksPage] Lecture impossible', error);
-        this.audioError.set(this.serverMessage(error, 'Impossible de charger ce morceau. Réessayez.'));
-        this.audioLoading.set(false);
-      },
-    });
+    this.player.play(track);
   }
 
   requestDelete(track: Track): void {
@@ -497,11 +478,7 @@ export class TracksPageComponent implements OnDestroy {
     this.service.delete(track.id).subscribe({
       next: () => {
         console.debug('[TracksPage] Piste supprimée', track.id);
-        if (this.playingTrackId() === track.id) {
-          this.revokeAudioUrl();
-          this.playingTitle.set('');
-          this.playingTrackId.set('');
-        }
+        if (this.player.currentTrack()?.id === track.id) this.player.clear();
 
         if (this.tracks().length === 1 && this.page() > 1) this.page.update((page) => page - 1);
         this.deletingTrackId.set('');
@@ -515,10 +492,6 @@ export class TracksPageComponent implements OnDestroy {
         this.deletingTrackId.set('');
       },
     });
-  }
-
-  audioPlaybackError(): void {
-    this.audioError.set('Le navigateur n’a pas réussi à lire ce fichier audio.');
   }
 
   formatSize(bytes: number): string {
@@ -535,7 +508,6 @@ export class TracksPageComponent implements OnDestroy {
     this.stopEstimatedProgress(this.coverSearchProgressTimer);
     this.stopEstimatedProgress(this.coverSelectionProgressTimer);
     if (this.coverSearchResetTimer) clearTimeout(this.coverSearchResetTimer);
-    this.revokeAudioUrl();
     for (const url of Object.values(this.coverImages())) URL.revokeObjectURL(url);
   }
 
@@ -573,9 +545,5 @@ export class TracksPageComponent implements OnDestroy {
     if (timer) clearInterval(timer);
   }
 
-  private revokeAudioUrl(): void {
-    const url = this.audioUrl();
-    if (url) URL.revokeObjectURL(url);
-    this.audioUrl.set('');
-  }
+
 }

@@ -1,1 +1,12 @@
 :host { display: block; }
+.now-playing-widget { position: fixed; z-index: 900; top: 50%; right: 1rem; width: 10.625rem; padding: 0.8125rem; transform: translateY(-50%); text-align: center; color: #49323f; border: 1px solid #dfb8c8; border-radius: 14px; background: #fffafd; box-shadow: 0 8px 28px #49323f2b; }
+.now-playing-cover-link { display: block; padding: 0; overflow: hidden; border-radius: 9px; background-color: #f8e3ec; }
+.now-playing-cover-link:hover { background: #edc5d5; }
+.now-playing-cover-link img, .mini-cover-placeholder { display: grid; width: 100%; aspect-ratio: 1; object-fit: cover; place-items: center; color: #a74870; font-size: 3rem; }
+.mini-cover-placeholder { background-color: #f8e3ec; }
+.widget-track-title { overflow: hidden; margin: 0.625rem 0; font-size: 1rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.widget-controls { display: flex; justify-content: center; gap: 0.3125rem; }
+.widget-controls button { display: grid; width: 2.5rem; height: 2.25rem; padding: 0; place-items: center; border-radius: 0.55rem; background: #e83b82; font-size: 1.125rem; }
+.widget-controls button:disabled { background: #f2a2c3; opacity: 1; }
+.widget-error { display: block; margin-top: 0.35rem; color: #a33; font-size: 0.7rem; }
+@media (max-width: 720px) { .now-playing-widget { top: auto; right: 0.65rem; bottom: 0.65rem; width: 8.75rem; padding: 0.5625rem; transform: none; } .widget-track-title { font-size: 0.9rem; } }

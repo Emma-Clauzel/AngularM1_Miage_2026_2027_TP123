@@ -1,0 +1,48 @@
+<section class="now-playing-page card" aria-labelledby="now-playing-title">
+  <a routerLink="/tracks">← Retour à la bibliothèque</a>
+  @if (player.currentTrack(); as track) {
+    <h1 id="now-playing-title">Musique en cours</h1>
+    @if (player.cover()) { <img class="large-cover" [src]="player.cover()" [alt]="'Pochette de ' + track.title" /> }
+    @else { <div class="large-cover cover-placeholder" aria-hidden="true">♪</div> }
+    <h2>{{ track.title }}</h2>
+    <p>{{ track.artist || 'Artiste inconnu' }}@if (track.album) { · {{ track.album }} }</p>
+    <div class="playback-controls">
+      <button type="button" class="transport-button" (click)="player.previous()" [disabled]="!player.hasPrevious()" aria-label="Piste précédente" title="Piste précédente">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M19 6 8 12l11 6V6Z" /></svg>
+      </button>
+      <button type="button" class="transport-button play-button" [class.is-playing]="player.playing()" (click)="player.toggle()" [disabled]="player.loading()" [attr.aria-label]="player.playing() ? 'Mettre en pause' : 'Lire'" [title]="player.playing() ? 'Pause' : 'Lire'">
+        @if (player.loading()) { <span aria-hidden="true">…</span> }
+        @else if (player.playing()) { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z" /></svg> }
+        @else { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z" /></svg> }
+      </button>
+      <button type="button" class="transport-button" (click)="player.next()" [disabled]="!player.hasNext()" aria-label="Piste suivante" title="Piste suivante">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M5 6l11 6-11 6V6Z" /></svg>
+      </button>
+    </div>
+    <div class="playback-options" aria-label="Options de lecture">
+      <button type="button" class="option-button" (click)="player.cycleLoopMode()" [class.active-option]="player.loopMode() !== 'off'" [attr.aria-pressed]="player.loopMode() !== 'off'"
+        [attr.aria-label]="player.loopMode() === 'off' ? 'Activer la boucle sur toute la sélection' : player.loopMode() === 'all' ? 'Répéter le morceau en cours' : 'Désactiver la boucle'"
+        [title]="player.loopMode() === 'off' ? 'Boucle désactivée' : player.loopMode() === 'all' ? 'Boucle sur toute la sélection' : 'Répéter le morceau en cours'">
+        <svg class="control-icon repeat-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M17.65 6.35A8 8 0 0 0 4 12h2a6 6 0 0 1 10.24-4.24L13 11h7V4l-2.35 2.35Z" />
+          <path d="M6.35 17.65A8 8 0 0 0 20 12h-2a6 6 0 0 1-10.24 4.24L11 13H4v7l2.35-2.35Z" />
+          @if (player.loopMode() === 'one') { <text x="12" y="15" class="repeat-one">1</text> }
+        </svg>
+      </button>
+      <button type="button" class="option-button" (click)="player.toggleShuffle()" [class.active-option]="player.shuffle()" [attr.aria-pressed]="player.shuffle()"
+        [attr.aria-label]="player.shuffle() ? 'Désactiver la lecture aléatoire' : 'Activer la lecture aléatoire'"
+        [title]="player.shuffle() ? 'Lecture aléatoire activée' : 'Lecture aléatoire désactivée'">
+        <svg class="control-icon shuffle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M3 6h3c5 0 7 12 12 12h1M3 18h3c5 0 7-12 12-12h1" />
+          <path class="shuffle-arrowhead" d="m17 14 5 4-5 4Zm0-12 5 4-5 4Z" />
+        </svg>
+      </button>
+    </div>
+    <div class="timeline"><span>{{ player.formatTime(player.currentTime()) }}</span><input type="range" min="0" [max]="player.duration() || 0" [value]="player.currentTime()" (input)="player.seek($event)" aria-label="Position dans le morceau" /><span>{{ player.formatTime(player.duration()) }}</span></div>
+    @if (player.error()) { <p class="error" role="status">{{ player.error() }}</p> }
+    <p class="queue-note">{{ player.queue().length }} piste(s) dans la sélection filtrée actuelle.</p>
+  } @else {
+    <h1 id="now-playing-title">Aucune musique en cours</h1>
+    <p>Lancez un morceau depuis la bibliothèque pour le retrouver ici.</p>
+  }
+</section>

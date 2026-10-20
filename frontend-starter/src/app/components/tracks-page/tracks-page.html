@@ -124,8 +124,8 @@
                 </dl>
               </div>
               <div class="track-actions">
-                <button type="button" (click)="play(track)" [disabled]="audioLoading()" [attr.aria-label]="'Lire ' + track.title">
-                  @if (audioLoading()) { Chargement… } @else { Lire }
+                <button type="button" (click)="play(track)" [disabled]="player.loading()" [attr.aria-label]="'Lire ' + track.title">
+                  @if (player.loading()) { Chargement… } @else { Lire }
                 </button>
                 <button class="delete-button" type="button" (click)="requestDelete(track)" [disabled]="!!deletingTrackId()" [attr.aria-label]="'Supprimer ' + track.title" [title]="'Supprimer ' + track.title">
                   @if (deletingTrackId() === track.id) { … } @else { 🗑 }
@@ -208,15 +208,6 @@
         <button type="button" (click)="go(page() + 1)" [disabled]="loading() || page() >= pages()">Suivant</button>
       </div>
 
-      @if (audioError()) {
-        <p class="error" role="alert">{{ audioError() }}</p>
-      }
-      @if (audioUrl()) {
-        <section class="player" aria-label="Lecteur audio">
-          <h3>Lecture en cours : {{ playingTitle() }}</h3>
-          <audio [src]="audioUrl()" controls autoplay (error)="audioPlaybackError()" aria-label="Lecteur du morceau sélectionné"></audio>
-        </section>
-      }
     </article>
   </div>
 

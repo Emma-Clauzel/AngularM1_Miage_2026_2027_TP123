@@ -18,3 +18,21 @@
 <main>
   <router-outlet />
 </main>
+
+@if (auth.token() && player.currentTrack(); as track) {
+  @if (!isNowPlayingPage) {
+  <aside class="now-playing-widget" aria-label="Lecteur en cours">
+    <a class="now-playing-cover-link" routerLink="/now-playing" [attr.aria-label]="'Afficher la lecture en cours : ' + track.title" title="Ouvrir la musique en cours">
+      @if (player.cover()) { <img [src]="player.cover()" [alt]="'Pochette de ' + track.title" /> }
+      @else { <span class="mini-cover-placeholder" aria-hidden="true">♪</span> }
+    </a>
+    <p class="widget-track-title">{{ track.title }}</p>
+    <div class="widget-controls">
+      <button type="button" (click)="player.previous()" [disabled]="!player.hasPrevious()" aria-label="Piste précédente" title="Piste précédente">◀|</button>
+      <button type="button" (click)="player.toggle()" [disabled]="player.loading()" [attr.aria-label]="player.playing() ? 'Mettre en pause' : 'Lire'" [title]="player.playing() ? 'Pause' : 'Lire'">{{ player.playing() ? 'Ⅱ' : '▶' }}</button>
+      <button type="button" (click)="player.next()" [disabled]="!player.hasNext()" aria-label="Piste suivante" title="Piste suivante">|▶</button>
+    </div>
+    @if (player.error()) { <span class="widget-error" role="status">{{ player.error() }}</span> }
+  </aside>
+  }
+}

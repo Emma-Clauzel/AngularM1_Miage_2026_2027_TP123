@@ -1,6 +1,10 @@
+import dns from "node:dns";
 import mongoose from "mongoose";
 import { createApp } from "./app.js";
 import { User } from "./models/User.js";
+
+// Le DNS système échouait pour les enregistrements SRV Atlas ; utiliser Google DNS.
+dns.setServers(["8.8.8.8"]);
 
 // Le port et l'URI viennent de l'environnement du backend, jamais d'Angular.
 const port = process.env.PORT || 3000;

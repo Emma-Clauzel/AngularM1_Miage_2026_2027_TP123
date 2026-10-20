@@ -1,0 +1,30 @@
+.now-playing-page { max-width: 36rem; margin: 0 auto; text-align: center; }
+.now-playing-page > a { float: left; }
+.now-playing-page h1 { clear: both; padding-top: 1rem; }
+.large-cover { display: block; width: min(20rem, 100%); aspect-ratio: 1; margin: 1.5rem auto 1rem; border-radius: 14px; object-fit: cover; box-shadow: 0 8px 26px #49323f24; }
+.cover-placeholder { display: grid; place-items: center; color: #a74870; background-color: #f8e3ec; font-size: 6rem; }
+.now-playing-page h2 { margin: 0.5rem 0; }
+.now-playing-page > p { color: #775d6b; }
+.playback-controls { display: flex; justify-content: center; gap: 0.75rem; margin: 1.5rem 0 1rem; }
+.transport-button { display: grid; width: 3.5rem; height: 3.5rem; padding: 0.75rem; place-items: center; border: 1px solid #a74870; border-radius: 50%; color: #6e2948; background: #fff7fa; }
+.transport-button:hover:not(:disabled) { background: #f3d5e1; }
+.transport-button.is-playing { background: #f8e3ec; }
+.transport-button.is-playing:hover:not(:disabled) { background: #efc5d6; }
+.transport-button:disabled { color: #6e2948; background: #fff7fa; opacity: 0.45; }
+.transport-button svg { width: 100%; height: 100%; fill: currentColor; }
+.transport-button:focus-visible { outline: 3px solid #a74870; outline-offset: 3px; }
+.playback-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; margin: 0.5rem 0 1.25rem; }
+.playback-options .option-button { display: grid; width: 3.5rem; height: 3.5rem; min-height: 0; padding: 0.72rem; place-items: center; border: 1px solid #a74870; border-radius: 50%; color: #6e2948; background: #fff7fa; cursor: pointer; }
+.playback-options button:hover:not(.active-option), .playback-options button:focus-visible:not(.active-option) { background: #f3d5e1; }
+.playback-options button.active-option { color: #fff; background: #a74870; }
+.playback-options button.active-option:hover { background: #893b5e; }
+.playback-options button:focus-visible { outline: 3px solid #e8a4c0; outline-offset: 2px; }
+.control-icon { display: block; width: 100%; height: 100%; overflow: visible; }
+.repeat-icon { fill: currentColor; }
+.repeat-one { fill: #fff; stroke: #6e2948; stroke-width: 0.8px; paint-order: stroke; font: 700 7px system-ui, sans-serif; text-anchor: middle; }
+.shuffle-icon { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.shuffle-icon .shuffle-arrowhead { fill: currentColor; stroke: none; }
+.timeline { display: grid; grid-template-columns: 3rem 1fr 3rem; align-items: center; gap: 0.5rem; font-variant-numeric: tabular-nums; }
+.timeline input { width: 100%; padding: 0; accent-color: #a74870; }
+.queue-note { margin-top: 1.5rem; font-size: 0.85rem; }
+.error { color: #a33 !important; }
