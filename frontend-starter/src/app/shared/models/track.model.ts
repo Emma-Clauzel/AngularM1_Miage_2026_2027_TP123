@@ -15,6 +15,7 @@ export interface Track {
     sourceUrl?: string;
     rightsConfirmed: boolean;
   } | null;
+  tags?: { id: string; name: string; icon: string; color: string }[];
 }
 
 export interface CoverSuggestion {

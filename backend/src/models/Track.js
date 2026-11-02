@@ -21,6 +21,7 @@ const schema = new mongoose.Schema(
     artist: { type: String, trim: true, default: "", maxlength: 200 },
     album: { type: String, trim: true, default: "", maxlength: 200 },
     releaseYear: { type: String, trim: true, default: "", maxlength: 10 },
+    tags: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }], default: [] },
     cover: {
       storedName: { type: String, default: "" },
       mimeType: { type: String, default: "" },
@@ -34,6 +35,7 @@ const schema = new mongoose.Schema(
 
 // Cet index accélère la liste des pistes d'un utilisateur triées par date.
 schema.index({ ownerId: 1, createdAt: -1 });
+schema.index({ ownerId: 1, tags: 1, createdAt: -1 });
 
 /**
  * Convertit un document Mongoose en objet sûr pour le frontend.
@@ -52,6 +54,9 @@ schema.methods.toPublic = function () {
     artist: this.artist,
     album: this.album,
     releaseYear: this.releaseYear,
+    tags: Array.isArray(this.tags) ? this.tags
+      .filter((tag) => tag && typeof tag === "object" && tag.name)
+      .map((tag) => ({ id: String(tag._id), name: tag.name, icon: tag.icon, color: tag.color })) : [],
     cover: this.cover?.storedName ? {
       mimeType: this.cover.mimeType,
       source: this.cover.source,

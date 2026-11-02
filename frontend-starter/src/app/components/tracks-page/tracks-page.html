@@ -1,4 +1,4 @@
-<section>
+<section class="tracks-page">
   <div class="hero">
     <p class="eyebrow">MA BIBLIOTHÈQUE</p>
     <h1>Backing tracks</h1>
@@ -59,6 +59,8 @@
           <button class="search-toggle" type="button" (click)="toggleSearch()" [attr.aria-expanded]="searchOpen()" aria-controls="track-search" aria-label="Rechercher un morceau" title="Rechercher un morceau">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"></circle><path d="m15.5 15.5 5 5"></path></svg>
           </button>
+          <button type="button" class="reset-filters-button" (click)="resetFilters()">Réinitialiser les filtres</button>
+          <button type="button" class="tag-manager-toggle" (click)="openTagManager()" [disabled]="loading() || !!error()">Tags</button>
           <button type="button" (click)="load()" [disabled]="loading()">Actualiser</button>
         </div>
       </div>
@@ -70,27 +72,16 @@
           <input id="track-search-artist" type="search" placeholder="Filtrer par artiste" [value]="artistFilter()" (input)="updateFilter($event, 'artist')" />
           <div class="search-filters">
             <div>
-              <label for="track-size-filter">Taille</label>
-              <select id="track-size-filter" [value]="sizeFilter()" (change)="updateFilter($event, 'size')">
-                <option value="">Toutes les tailles</option><option value="small">Moins de 2 Mo</option><option value="medium">De 2 à 10 Mo</option><option value="large">10 Mo et plus</option>
+              <label for="track-tag-filter">Filtrer par tag</label>
+              <select id="track-tag-filter" [value]="selectedTagId()" (change)="setTagFilter($event)">
+                <option value="">Tous les morceaux</option>
+                @for (tag of tags(); track tag.id) {
+                  <option [value]="tag.id">{{ tagSymbol(tag.icon) }} {{ tag.name }}</option>
+                }
               </select>
-            </div>
-            <div>
-              <label for="track-format-filter">Format</label>
-              <select id="track-format-filter" [value]="formatFilter()" (change)="updateFilter($event, 'format')">
-                <option value="">Tous les formats</option><option value="audio/mpeg">MP3</option><option value="audio/wav">WAV</option><option value="audio/x-wav">WAV</option><option value="audio/ogg">OGG</option><option value="audio/mp4">M4A</option><option value="audio/x-m4a">M4A</option>
-              </select>
-            </div>
-            <div>
-              <label for="track-date-from">Ajouté à partir du</label>
-              <input id="track-date-from" type="date" [value]="dateFrom()" (change)="updateFilter($event, 'from')" />
-            </div>
-            <div>
-              <label for="track-date-to">Ajouté jusqu’au</label>
-              <input id="track-date-to" type="date" [value]="dateTo()" (change)="updateFilter($event, 'to')" />
             </div>
           </div>
-          <p class="search-count" aria-live="polite">{{ filteredTracks().length }} résultat(s) sur cette page</p>
+          <p class="search-count" aria-live="polite">{{ filteredTracks().length }} résultat(s) dans la bibliothèque</p>
         </div>
       }
       @if (loading()) {
@@ -105,23 +96,33 @@
           @for (track of filteredTracks(); track track.id) {
             <article class="track-card">
               <div class="track-details">
-                <button class="cover-trigger" type="button" (click)="openCoverManager(track)" [attr.aria-label]="'Afficher ou modifier la pochette de ' + track.title" [title]="'Modifier la pochette de ' + track.title">
-                  @if (track.cover && coverImages()[track.id]) {
-                    <img class="track-cover" [src]="coverImages()[track.id]" [alt]="'Pochette de ' + track.title" />
-                  } @else {
-                    <span class="cover-placeholder" aria-hidden="true">♪</span>
+                <div class="track-top-row">
+                  <button class="cover-trigger" type="button" (click)="openCoverManager(track)" [attr.aria-label]="'Afficher ou modifier la pochette de ' + track.title" [title]="'Modifier la pochette de ' + track.title">
+                    @if (track.cover && coverImages()[track.id]) {
+                      <img class="track-cover" [src]="coverImages()[track.id]" [alt]="'Pochette de ' + track.title" />
+                    } @else {
+                      <span class="cover-placeholder" aria-hidden="true">♪</span>
+                    }
+                  </button>
+                  @if (track.tags?.length) {
+                    <div class="track-tags" [attr.aria-label]="'Tags de ' + track.title">
+                      @for (tag of track.tags ?? []; track tag.id) {
+                        <span class="track-tag" [style.backgroundColor]="tag.color"><span aria-hidden="true">{{ tagSymbol(tag.icon) }}</span> {{ tag.name }}</span>
+                      }
+                    </div>
                   }
-                </button>
-                <h3>{{ track.title }}</h3>
-                @if (track.artist || track.album) {
-                  <p class="track-metadata">{{ track.artist || 'Artiste inconnu' }}@if (track.album) { · {{ track.album }} }</p>
-                }
-                <p>{{ track.originalName }}</p>
-                <dl>
-                  <div><dt>Format</dt><dd>{{ track.mimeType }}</dd></div>
-                  <div><dt>Taille</dt><dd>{{ formatSize(track.size) }}</dd></div>
-                  <div><dt>Ajouté le</dt><dd>{{ formatDate(track.createdAt) }}</dd></div>
-                </dl>
+                </div>
+                <div class="track-summary">
+                  <h3>{{ track.title }}</h3>
+                  @if (track.artist || track.album) {
+                    <p class="track-metadata">{{ track.artist || 'Artiste inconnu' }}@if (track.album) { · {{ track.album }} }</p>
+                  }
+                  <dl>
+                    <div><dt>Format</dt><dd>{{ track.mimeType }}</dd></div>
+                    <div><dt>Taille</dt><dd>{{ formatSize(track.size) }}</dd></div>
+                    <div><dt>Ajouté le</dt><dd>{{ formatDate(track.createdAt) }}</dd></div>
+                  </dl>
+                </div>
               </div>
               <div class="track-actions">
                 <button type="button" (click)="play(track)" [disabled]="player.loading()" [attr.aria-label]="'Lire ' + track.title">
@@ -202,12 +203,70 @@
           }
         </dialog>
       }
-      <div class="pager" aria-label="Pagination de la bibliothèque">
-        <button type="button" (click)="go(page() - 1)" [disabled]="loading() || page() <= 1">Précédent</button>
-        <span>Page {{ page() }} / {{ pages() }}</span>
-        <button type="button" (click)="go(page() + 1)" [disabled]="loading() || page() >= pages()">Suivant</button>
-      </div>
-
+      <dialog #tagDialog class="tag-dialog" aria-labelledby="tag-manager-title" (cancel)="closeTagManager()">
+        <div class="row tag-dialog-heading">
+          <h2 id="tag-manager-title">Tags de la bibliothèque</h2>
+          <button class="cancel-button" type="button" (click)="closeTagManager()" aria-label="Fermer la gestion des tags">Fermer</button>
+        </div>
+        <div class="tag-manager-layout">
+          <section class="tag-list" aria-labelledby="tag-list-heading">
+            <div class="row"><h3 id="tag-list-heading">Mes tags</h3><button type="button" (click)="startNewTag()">Nouveau tag</button></div>
+            <div class="tag-list-items">
+              @if (tags().length) {
+                @for (tag of tags(); track tag.id) {
+                  <div class="tag-row">
+                    <span class="track-tag" [style.backgroundColor]="tag.color"><span aria-hidden="true">{{ tagSymbol(tag.icon) }}</span> {{ tag.name }}</span>
+                    <small>{{ tag.trackIds.length }} morceau(x)</small>
+                    <div class="tag-row-actions">
+                      <button type="button" (click)="editTag(tag)" [attr.aria-label]="'Modifier le tag ' + tag.name">Modifier</button>
+                      <button type="button" class="delete-button" (click)="deleteTag(tag)" [attr.aria-label]="'Supprimer le tag ' + tag.name">🗑</button>
+                    </div>
+                  </div>
+                }
+              } @else {
+                <p>Aucun tag. Créez-en un pour regrouper des morceaux.</p>
+              }
+            </div>
+          </section>
+          <section class="tag-editor" aria-labelledby="tag-editor-heading">
+            <h3 id="tag-editor-heading">{{ editingTagId() ? 'Modifier un tag' : 'Créer un tag' }}</h3>
+            <label for="tag-name">Nom</label>
+            <input id="tag-name" type="text" maxlength="40" [value]="tagName()" (input)="updateTagName($event)" placeholder="Ex. Échauffement" />
+            <label for="tag-icon">Icône</label>
+            <select id="tag-icon" [value]="tagIcon()" (change)="updateTagIcon($event)">
+              @for (icon of tagIconOptions; track icon.value) { <option [value]="icon.value">{{ icon.symbol }} {{ icon.label }}</option> }
+            </select>
+            <label for="tag-color">Couleur</label>
+            <select id="tag-color" [value]="tagColor()" (change)="updateTagColor($event)">
+              @for (color of tagColorOptions; track color.value) { <option [value]="color.value">{{ color.label }}</option> }
+            </select>
+            <span class="tag-preview" [style.backgroundColor]="tagColor()"><span aria-hidden="true">{{ tagSymbol(tagIcon()) }}</span> {{ tagName() || 'Aperçu du tag' }}</span>
+            <label for="tag-track-search">Rechercher un morceau à associer</label>
+            <input id="tag-track-search" type="search" [value]="tagTrackSearch()" (input)="updateTagTrackSearch($event)" placeholder="Titre ou artiste" />
+            <div class="tag-track-choices" aria-label="Morceaux associés au tag">
+              @if (allTracksLoading()) {
+                <p role="status">Chargement de la bibliothèque…</p>
+              } @else {
+                @for (track of selectableTracks(); track track.id) {
+                  <label class="tag-track-choice">
+                    <input type="checkbox" [checked]="tagTrackIds().includes(track.id)" (change)="toggleTagTrack(track.id, $event)" />
+                    <span>{{ track.title }}<small>{{ track.artist || track.originalName }}</small></span>
+                  </label>
+                } @empty {
+                  <p>Aucun morceau ne correspond.</p>
+                }
+              }
+            </div>
+            @if (tagError()) { <p class="error" role="alert">{{ tagError() }}</p> }
+            <div class="dialog-actions">
+              <button type="button" class="cancel-button" (click)="closeTagManager()">Fermer</button>
+              <button type="button" (click)="saveTag()" [disabled]="!tagName().trim() || tagManagerSaving() || allTracksLoading()">
+                @if (tagManagerSaving()) { Enregistrement… } @else { <span>{{ editingTagId() ? 'Enregistrer' : 'Créer le tag' }}</span> }
+              </button>
+            </div>
+          </section>
+        </div>
+      </dialog>
     </article>
   </div>
 

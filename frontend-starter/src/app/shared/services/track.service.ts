@@ -2,16 +2,46 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Page } from '../models/page.model';
 import { CoverSuggestion, Track } from '../models/track.model';
+import { Tag, TagInput } from '../models/tag.model';
+import { forkJoin, map, of, switchMap } from 'rxjs';
 
 /** Encapsulates all HTTP operations for backing tracks. */
 @Injectable({ providedIn: 'root' })
 export class TrackService {
   private readonly http = inject(HttpClient);
 
-  list(page = 1, limit = 5) {
+  list(page = 1, limit = 5, tagId = '') {
+    const params: Record<string, string | number> = { page, limit };
+    if (tagId) params['tagId'] = tagId;
     return this.http.get<Page<Track>>('/api/tracks', {
-      params: { page, limit },
+      params,
     });
+  }
+
+  listAll(tagId = '') {
+    return this.list(1, 20, tagId).pipe(
+      switchMap((firstPage) => {
+        const remaining = Array.from({ length: firstPage.pages - 1 }, (_, index) => this.list(index + 2, 20, tagId));
+        if (!remaining.length) return of(firstPage.items);
+        return forkJoin(remaining).pipe(map((pages) => [...firstPage.items, ...pages.flatMap((page) => page.items)]));
+      }),
+    );
+  }
+
+  listTags() {
+    return this.http.get<Tag[]>('/api/tags');
+  }
+
+  createTag(input: TagInput) {
+    return this.http.post<Tag>('/api/tags', input);
+  }
+
+  updateTag(id: string, input: TagInput) {
+    return this.http.put<Tag>(`/api/tags/${id}`, input);
+  }
+
+  deleteTag(id: string) {
+    return this.http.delete<void>(`/api/tags/${id}`);
   }
 
   inspectAudio(file: File) {

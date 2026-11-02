@@ -5,17 +5,32 @@
   </div>
   <nav aria-label="Navigation principale">
     @if (auth.token()) {
-      <a routerLink="/tracks">Backing tracks</a>
+      <button type="button" class="theme-toggle" (click)="toggleTheme()" [attr.aria-pressed]="darkTheme()"
+        [attr.aria-label]="darkTheme() ? 'Activer le thème clair' : 'Activer le thème sombre'"
+        [title]="darkTheme() ? 'Activer le thème clair' : 'Activer le thème sombre'">
+        <svg viewBox="0 0 24 24" [class.is-lit]="!darkTheme()" aria-hidden="true" focusable="false">
+          <path class="bulb-rays" d="M12 2v2M5.64 5.64l1.42 1.42M2 12h2m14 0h4m-3.06-6.36-1.42 1.42" />
+          <path class="bulb-outline" d="M9 18h6m-5 3h4m-6-6.2a7 7 0 1 1 8 0c-.8.6-1 1.4-1 2.2h-6c0-.8-.2-1.6-1-2.2Z" />
+        </svg>
+      </button>
       <a routerLink="/profile">Profil</a>
       <button type="button" (click)="logout()">Déconnexion</button>
     } @else {
       <a routerLink="/login">Connexion</a>
+      <button type="button" class="theme-toggle" (click)="toggleTheme()" [attr.aria-pressed]="darkTheme()"
+        [attr.aria-label]="darkTheme() ? 'Activer le thème clair' : 'Activer le thème sombre'"
+        [title]="darkTheme() ? 'Activer le thème clair' : 'Activer le thème sombre'">
+        <svg viewBox="0 0 24 24" [class.is-lit]="!darkTheme()" aria-hidden="true" focusable="false">
+          <path class="bulb-rays" d="M12 2v2M5.64 5.64l1.42 1.42M2 12h2m14 0h4m-3.06-6.36-1.42 1.42" />
+          <path class="bulb-outline" d="M9 18h6m-5 3h4m-6-6.2a7 7 0 1 1 8 0c-.8.6-1 1.4-1 2.2h-6c0-.8-.2-1.6-1-2.2Z" />
+        </svg>
+      </button>
       <a routerLink="/register">Créer un compte</a>
     }
   </nav>
 </header>
 
-<main>
+<main [class.tracks-view]="isTracksPage">
   <router-outlet />
 </main>
 

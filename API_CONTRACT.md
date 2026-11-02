@@ -11,7 +11,11 @@ Le contrat HTTP ne dépend pas du choix de persistance : le backend fourni utili
 | POST | `/auth/login` | `{email,password}` | `200 {token,user}` |
 | GET | `/users/me` | JWT | `200 User` |
 | PUT | `/users/me` | `{name}` + JWT | `200 User` |
-| GET | `/tracks?page=1&limit=5` | JWT | `Page<Track>` |
+| GET | `/tags` | JWT | `Tag[]` avec `id`, `name`, `icon`, `color` et `trackIds` |
+| POST | `/tags` | JWT, JSON `{name, icon, color, trackIds[]}` | `201 Tag` |
+| PUT | `/tags/:id` | JWT, JSON `{name, icon, color, trackIds[]}` | `200 Tag` |
+| DELETE | `/tags/:id` | JWT | `204`; supprime les associations sans supprimer les pistes |
+| GET | `/tracks?page=1&limit=5&tagId=...` | JWT; `tagId` facultatif | `Page<Track>` filtrée par tag si fourni |
 | POST | `/tracks/metadata` | JWT, multipart : `audio` | `200 { title, artist, album, releaseYear, embeddedCoverDataUrl }` ; lit les tags ID3 sans créer de piste, supprime le fichier temporaire |
 | POST | `/tracks` | multipart : `audio`, `title?`, `artist?` (valeurs par défaut depuis ID3 ou le nom du fichier) | `201 Track` avec métadonnées et éventuelle pochette intégrée |
 | GET | `/tracks/:id/audio` | JWT | flux audio |
@@ -21,7 +25,7 @@ Le contrat HTTP ne dépend pas du choix de persistance : le backend fourni utili
 | POST | `/tracks/:id/cover/upload` | JWT, propriétaire; multipart `cover`, `rightsConfirmed=true` | `200 Track`; JPEG/PNG, 5 Mo maximum, 4096 × 4096 et 12 mégapixels maximum |
 | DELETE | `/tracks/:id` | JWT | `204` (bonus) |
 
-`Page<Track>` contient `items`, `page`, `limit`, `total` et `pages`. Formats acceptés : MP3, WAV, OGG et M4A, 25 Mo maximum.
+`Page<Track>` contient `items`, `page`, `limit`, `total` et `pages`. Chaque piste contient aussi `tags[]` (id, nom, icône et couleur). Les icônes acceptées sont `star`, `heart`, `bolt`, `music`, `guitar` et `bookmark`; les couleurs sont choisies dans la palette définie par l'application. Chaque utilisateur ne peut lire et modifier que ses propres tags et pistes. Formats acceptés : MP3, WAV, OGG et M4A, 25 Mo maximum.
 
 Erreurs courantes : `400` validation, `401` authentification, `404` ressource, `409` email déjà utilisé; `502` service de recherche externe indisponible.
 

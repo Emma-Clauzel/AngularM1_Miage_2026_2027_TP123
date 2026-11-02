@@ -6,15 +6,37 @@ import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import mongoose from "mongoose";
 import { parseFile } from "music-metadata";
 import { User } from "./models/User.js";
 import { Track } from "./models/Track.js";
+import { TAG_COLORS, TAG_ICONS, Tag } from "./models/Tag.js";
 import { downloadCover, findCoverSuggestions, saveCoverBytes } from "./cover-service.js";
 
 // Les fichiers audio restent sur le disque du serveur dans ce TP.
 // MongoDB ne conserve que leurs métadonnées : titre, nom, taille, etc.
 const UPLOADS = path.resolve("data/uploads");
 const COVERS = path.resolve("data/covers");
+const tagIcons = new Set(TAG_ICONS);
+const tagColors = new Set(TAG_COLORS);
+
+function parseTagInput(body) {
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const icon = body?.icon;
+  const color = body?.color;
+  const trackIds = Array.isArray(body?.trackIds) ? [...new Set(body.trackIds.map(String))] : [];
+  if (!name || name.length > 40) return { error: "Le nom du tag doit contenir de 1 à 40 caractères." };
+  if (!tagIcons.has(icon)) return { error: "Icône de tag non valide." };
+  if (!tagColors.has(color)) return { error: "Couleur de tag non valide." };
+  if (trackIds.some((id) => !mongoose.isValidObjectId(id))) return { error: "Une piste sélectionnée n’est pas valide." };
+  return { value: { name, icon, color, trackIds } };
+}
+
+async function areOwnedTracks(trackIds, ownerId) {
+  if (!trackIds.length) return true;
+  const matches = await Track.find({ _id: { $in: trackIds }, ownerId }).select("_id").lean();
+  return matches.length === trackIds.length;
+}
 
 try {
   // mkdirSync est utilisé au démarrage : l'application doit disposer de ce
@@ -336,12 +358,97 @@ export function createApp() {
     }
   });
 
+  /** Retourne les tags et leurs pistes pour l'utilisateur authentifié. */
+  app.get("/api/tags", auth, async (req, res, next) => {
+    try {
+      const tags = await Tag.find({ ownerId: req.auth.sub }).sort({ createdAt: 1 }).lean();
+      const trackIds = tags.map((tag) => tag._id);
+      const tracks = trackIds.length
+        ? await Track.find({ ownerId: req.auth.sub, tags: { $in: trackIds } }).select("_id tags").lean()
+        : [];
+      const memberships = new Map(trackIds.map((id) => [String(id), []]));
+      for (const track of tracks) {
+        for (const id of track.tags ?? []) memberships.get(String(id))?.push(String(track._id));
+      }
+      res.json(tags.map(({ _id, ownerId, __v, ...tag }) => ({
+        ...tag,
+        id: String(_id),
+        trackIds: memberships.get(String(_id)) ?? [],
+      })));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/tags", auth, async (req, res, next) => {
+    try {
+      const parsed = parseTagInput(req.body);
+      if (parsed.error) return res.status(400).json({ message: parsed.error });
+      const { name, icon, color, trackIds } = parsed.value;
+      if (!(await areOwnedTracks(trackIds, req.auth.sub))) {
+        return res.status(400).json({ message: "Une ou plusieurs pistes sélectionnées sont introuvables." });
+      }
+      const tag = await Tag.create({ ownerId: req.auth.sub, name, icon, color });
+      if (trackIds.length) {
+        await Track.updateMany({ ownerId: req.auth.sub, _id: { $in: trackIds } }, { $addToSet: { tags: tag._id } });
+      }
+      res.status(201).json({ id: String(tag.id), name: tag.name, icon: tag.icon, color: tag.color, trackIds });
+    } catch (error) {
+      if (error?.code === 11000) return res.status(409).json({ message: "Un tag porte déjà ce nom." });
+      next(error);
+    }
+  });
+
+  app.put("/api/tags/:id", auth, async (req, res, next) => {
+    try {
+      const tag = await Tag.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!tag) return res.status(404).json({ message: "Tag introuvable." });
+      const parsed = parseTagInput(req.body);
+      if (parsed.error) return res.status(400).json({ message: parsed.error });
+      const { name, icon, color, trackIds } = parsed.value;
+      if (!(await areOwnedTracks(trackIds, req.auth.sub))) {
+        return res.status(400).json({ message: "Une ou plusieurs pistes sélectionnées sont introuvables." });
+      }
+      tag.name = name;
+      tag.icon = icon;
+      tag.color = color;
+      await tag.save();
+      await Track.updateMany({ ownerId: req.auth.sub, tags: tag._id }, { $pull: { tags: tag._id } });
+      if (trackIds.length) {
+        await Track.updateMany({ ownerId: req.auth.sub, _id: { $in: trackIds } }, { $addToSet: { tags: tag._id } });
+      }
+      res.json({ id: String(tag.id), name: tag.name, icon: tag.icon, color: tag.color, trackIds });
+    } catch (error) {
+      if (error?.code === 11000) return res.status(409).json({ message: "Un tag porte déjà ce nom." });
+      next(error);
+    }
+  });
+
+  app.delete("/api/tags/:id", auth, async (req, res, next) => {
+    try {
+      const tag = await Tag.findOneAndDelete({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!tag) return res.status(404).json({ message: "Tag introuvable." });
+      await Track.updateMany({ ownerId: req.auth.sub, tags: tag._id }, { $pull: { tags: tag._id } });
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   /** Retourne une page des pistes appartenant exclusivement à l'utilisateur. */
   app.get("/api/tracks", auth, async (req, res, next) => {
     try {
       const page = Math.max(1, Number(req.query.page) || 1);
       const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 5));
       const filter = { ownerId: req.auth.sub };
+      if (req.query.tagId) {
+        if (!mongoose.isValidObjectId(String(req.query.tagId))) {
+          return res.status(400).json({ message: "Identifiant de tag non valide." });
+        }
+        const tag = await Tag.findOne({ _id: String(req.query.tagId), ownerId: req.auth.sub }).select("_id").lean();
+        if (!tag) return res.status(404).json({ message: "Tag introuvable." });
+        filter.tags = tag._id;
+      }
 
       console.log(`[tracks] Lecture page=${page}, limit=${limit}, user=${req.auth.sub}`);
 
@@ -357,6 +464,7 @@ export function createApp() {
           .skip((page - 1) * limit)
           .limit(limit)
           .select("-storedName")
+          .populate({ path: "tags", select: "name icon color", match: { ownerId: req.auth.sub } })
           .lean(),
         Track.countDocuments(filter),
       ]);
@@ -366,9 +474,10 @@ export function createApp() {
       // L'identifiant MongoDB (_id) est converti en chaîne de caractères (id) pour être plus lisible 
       // côté frontend.
       // Le champ _id (généré par MongoDB) est supprimé pour éviter de l'exposer dans la réponse JSON.
-      const publicItems = items.map(({ _id, ownerId, cover, __v, ...track }) => ({
+      const publicItems = items.map(({ _id, ownerId, cover, tags = [], __v, ...track }) => ({
         ...track,
         id: String(_id),
+        tags: tags.filter(Boolean).map((tag) => ({ id: String(tag._id), name: tag.name, icon: tag.icon, color: tag.color })),
         cover: cover?.storedName ? {
           mimeType: cover.mimeType,
           source: cover.source,

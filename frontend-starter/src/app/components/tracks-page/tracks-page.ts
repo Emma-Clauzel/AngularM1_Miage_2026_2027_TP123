@@ -2,6 +2,7 @@ import { HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { Component, computed, effect, ElementRef, inject, OnDestroy, signal, ViewChild, WritableSignal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { CoverSuggestion, Track } from '../../shared/models/track.model';
+import { TAG_COLOR_OPTIONS, TAG_ICON_OPTIONS, Tag, TagIcon, TagInput } from '../../shared/models/tag.model';
 import { TrackService } from '../../shared/services/track.service';
 import { MusicPlayerService } from '../../shared/services/music-player.service';
 
@@ -28,11 +29,10 @@ export class TracksPageComponent implements OnDestroy {
   @ViewChild('uploadCoverInput') private uploadCoverInput?: ElementRef<HTMLInputElement>;
   @ViewChild('deleteDialog') private deleteDialog?: ElementRef<HTMLDialogElement>;
   @ViewChild('coverDialog') private coverDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('tagDialog') private tagDialog?: ElementRef<HTMLDialogElement>;
   @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
 
   readonly tracks = signal<Track[]>([]);
-  readonly page = signal(1);
-  readonly pages = signal(1);
   readonly loading = signal(false);
   readonly error = signal('');
   readonly uploadLoading = signal(false);
@@ -72,26 +72,31 @@ export class TracksPageComponent implements OnDestroy {
   readonly searchOpen = signal(false);
   readonly searchTerm = signal('');
   readonly artistFilter = signal('');
-  readonly sizeFilter = signal('');
-  readonly formatFilter = signal('');
-  readonly dateFrom = signal('');
-  readonly dateTo = signal('');
+  readonly selectedTagId = signal('');
+  readonly tags = signal<Tag[]>([]);
+  readonly allTracks = signal<Track[]>([]);
+  readonly allTracksLoading = signal(false);
+  readonly tagManagerSaving = signal(false);
+  readonly tagError = signal('');
+  readonly editingTagId = signal('');
+  readonly tagName = signal('');
+  readonly tagIcon = signal<TagIcon>('star');
+  readonly tagColor = signal(TAG_COLOR_OPTIONS[0].value);
+  readonly tagTrackIds = signal<string[]>([]);
+  readonly tagTrackSearch = signal('');
+  readonly tagIconOptions = TAG_ICON_OPTIONS;
+  readonly tagColorOptions = TAG_COLOR_OPTIONS;
+  readonly selectableTracks = computed(() => {
+    const term = this.tagTrackSearch().trim().toLocaleLowerCase('fr');
+    return this.allTracks().filter((track) => !term || `${track.title} ${track.artist ?? ''} ${track.originalName}`.toLocaleLowerCase('fr').includes(term));
+  });
   readonly filteredTracks = computed(() => {
     const term = this.searchTerm().trim().toLocaleLowerCase('fr');
     const artist = this.artistFilter().trim().toLocaleLowerCase('fr');
-    const sizeFilter = this.sizeFilter();
-    const format = this.formatFilter();
-    const from = this.dateFrom();
-    const to = this.dateTo();
     return this.tracks().filter((track) => {
       const matchesTerm = !term || `${track.title} ${track.originalName}`.toLocaleLowerCase('fr').includes(term);
       const matchesArtist = !artist || (track.artist ?? '').toLocaleLowerCase('fr').includes(artist);
-      const sizeMb = track.size / (1024 * 1024);
-      const matchesSize = !sizeFilter || (sizeFilter === 'small' ? sizeMb < 2 : sizeFilter === 'medium' ? sizeMb >= 2 && sizeMb < 10 : sizeMb >= 10);
-      const trackDate = new Date(track.createdAt).toISOString().slice(0, 10);
-      const matchesDate = (!from || trackDate >= from) && (!to || trackDate <= to);
-      const matchesFormat = !format || track.mimeType === format;
-      return matchesTerm && matchesArtist && matchesSize && matchesDate && matchesFormat;
+      return matchesTerm && matchesArtist;
     });
   });
   readonly title = new FormControl('', { nonNullable: true });
@@ -101,6 +106,7 @@ export class TracksPageComponent implements OnDestroy {
   constructor() {
     effect(() => this.player.setQueue(this.filteredTracks()));
     this.load();
+    this.loadTags();
   }
 
   choose(event: Event): void {
@@ -134,14 +140,13 @@ export class TracksPageComponent implements OnDestroy {
   load(): void {
     this.loading.set(true);
     this.error.set('');
-    this.service.list(this.page()).subscribe({
+    this.service.listAll(this.selectedTagId()).subscribe({
       next: (response) => {
-        console.debug('[TracksPage] Pistes chargées', response.items.length);
-        this.tracks.set(response.items);
-        this.pages.set(response.pages);
+        console.debug('[TracksPage] Pistes chargées', response.length);
+        this.tracks.set(response);
         for (const url of Object.values(this.coverImages())) URL.revokeObjectURL(url);
         this.coverImages.set({});
-        response.items.filter((track) => !!track.cover).forEach((track) => this.loadCover(track));
+        response.filter((track) => !!track.cover).forEach((track) => this.loadCover(track));
         this.loading.set(false);
       },
       error: (error: unknown) => {
@@ -152,35 +157,143 @@ export class TracksPageComponent implements OnDestroy {
     });
   }
 
-  go(page: number): void {
-    if (this.loading() || page < 1 || page > this.pages() || page === this.page()) return;
-    this.page.set(page);
+  toggleSearch(): void {
+    this.searchOpen.update((open) => !open);
+    if (this.searchOpen()) setTimeout(() => this.searchInput?.nativeElement.focus());
+  }
+
+  resetFilters(): void {
+    this.searchTerm.set('');
+    this.artistFilter.set('');
+    if (this.selectedTagId()) {
+      this.selectedTagId.set('');
+      this.load();
+    }
+  }
+
+  updateFilter(event: Event, filter: 'term' | 'artist'): void {
+    const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
+    if (filter === 'term') this.searchTerm.set(value);
+    else this.artistFilter.set(value);
+  }
+
+  setTagFilter(event: Event): void {
+    this.selectedTagId.set((event.target as HTMLSelectElement).value);
     this.load();
   }
 
-  toggleSearch(): void {
-    this.searchOpen.update((open) => !open);
-    if (!this.searchOpen()) this.clearSearch();
-    else setTimeout(() => this.searchInput?.nativeElement.focus());
+  loadTags(): void {
+    this.service.listTags().subscribe({
+      next: (tags) => this.tags.set(tags),
+      error: (error: unknown) => {
+        console.error('[TracksPage] Chargement des tags impossible', error);
+        this.tagError.set(this.serverMessage(error, 'Impossible de charger les tags.'));
+      },
+    });
   }
 
-  clearSearch(): void {
-    this.searchTerm.set('');
-    this.artistFilter.set('');
-    this.sizeFilter.set('');
-    this.formatFilter.set('');
-    this.dateFrom.set('');
-    this.dateTo.set('');
+  openTagManager(): void {
+    this.tagError.set('');
+    this.resetTagForm();
+    this.tagDialog?.nativeElement.showModal();
+    this.loadTags();
+    this.allTracksLoading.set(true);
+    this.service.listAll().subscribe({
+      next: (tracks) => {
+        this.allTracks.set(tracks);
+        this.allTracksLoading.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Chargement des pistes pour les tags impossible', error);
+        this.tagError.set(this.serverMessage(error, 'Impossible de charger les pistes à associer.'));
+        this.allTracksLoading.set(false);
+      },
+    });
   }
 
-  updateFilter(event: Event, filter: 'term' | 'artist' | 'size' | 'format' | 'from' | 'to'): void {
-    const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
-    if (filter === 'term') this.searchTerm.set(value);
-    else if (filter === 'artist') this.artistFilter.set(value);
-    else if (filter === 'size') this.sizeFilter.set(value);
-    else if (filter === 'format') this.formatFilter.set(value);
-    else if (filter === 'from') this.dateFrom.set(value);
-    else this.dateTo.set(value);
+  closeTagManager(): void {
+    if (this.tagDialog?.nativeElement.open) this.tagDialog.nativeElement.close();
+    this.tagError.set('');
+  }
+
+  startNewTag(): void {
+    this.resetTagForm();
+    this.tagError.set('');
+  }
+
+  editTag(tag: Tag): void {
+    this.editingTagId.set(tag.id);
+    this.tagName.set(tag.name);
+    this.tagIcon.set(tag.icon);
+    this.tagColor.set(tag.color);
+    this.tagTrackIds.set([...tag.trackIds]);
+    this.tagTrackSearch.set('');
+    this.tagError.set('');
+  }
+
+  updateTagName(event: Event): void { this.tagName.set((event.target as HTMLInputElement).value); }
+  updateTagIcon(event: Event): void { this.tagIcon.set((event.target as HTMLSelectElement).value as TagIcon); }
+  updateTagColor(event: Event): void { this.tagColor.set((event.target as HTMLSelectElement).value); }
+  updateTagTrackSearch(event: Event): void { this.tagTrackSearch.set((event.target as HTMLInputElement).value); }
+
+  toggleTagTrack(trackId: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.tagTrackIds.update((ids) => checked ? [...new Set([...ids, trackId])] : ids.filter((id) => id !== trackId));
+  }
+
+  tagSymbol(icon: string): string {
+    return TAG_ICON_OPTIONS.find((option) => option.value === icon)?.symbol ?? '★';
+  }
+
+  saveTag(): void {
+    const name = this.tagName().trim();
+    if (!name || this.tagManagerSaving() || this.allTracksLoading()) return;
+    const input: TagInput = { name, icon: this.tagIcon(), color: this.tagColor(), trackIds: this.tagTrackIds() };
+    this.tagManagerSaving.set(true);
+    this.tagError.set('');
+    const request = this.editingTagId()
+      ? this.service.updateTag(this.editingTagId(), input)
+      : this.service.createTag(input);
+    request.subscribe({
+      next: () => {
+        this.tagManagerSaving.set(false);
+        this.showSnackbar(this.editingTagId() ? 'Tag modifié' : 'Tag créé', 'success');
+        this.closeTagManager();
+        this.loadTags();
+        this.load();
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Enregistrement du tag impossible', error);
+        this.tagError.set(this.serverMessage(error, 'Impossible d’enregistrer le tag.'));
+        this.tagManagerSaving.set(false);
+      },
+    });
+  }
+
+  deleteTag(tag: Tag): void {
+    if (!window.confirm(`Supprimer le tag « ${tag.name} » ? Les morceaux ne seront pas supprimés.`)) return;
+    this.service.deleteTag(tag.id).subscribe({
+      next: () => {
+        this.showSnackbar('Tag supprimé', 'success');
+        if (this.selectedTagId() === tag.id) this.selectedTagId.set('');
+        this.loadTags();
+        this.load();
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Suppression du tag impossible', error);
+        this.tagError.set(this.serverMessage(error, 'Impossible de supprimer le tag.'));
+        this.showSnackbar('Suppression du tag échouée', 'error');
+      },
+    });
+  }
+
+  private resetTagForm(): void {
+    this.editingTagId.set('');
+    this.tagName.set('');
+    this.tagIcon.set('star');
+    this.tagColor.set(TAG_COLOR_OPTIONS[0].value);
+    this.tagTrackIds.set([]);
+    this.tagTrackSearch.set('');
   }
 
   openCoverManager(track: Track): void {
@@ -327,7 +440,7 @@ export class TracksPageComponent implements OnDestroy {
 
   private coverSaved(updated: Track): void {
     console.debug('[TracksPage] Pochette enregistrée', updated.id);
-    this.tracks.update((tracks) => tracks.map((track) => track.id === updated.id ? updated : track));
+    this.tracks.update((tracks) => tracks.map((track) => track.id === updated.id ? { ...track, ...updated, tags: track.tags ?? updated.tags } : track));
     this.loadCover(updated);
     if (this.coverSavingAction() === 'select') {
       this.stopEstimatedProgress(this.coverSelectionProgressTimer);
@@ -411,7 +524,6 @@ export class TracksPageComponent implements OnDestroy {
           this.embeddedCoverPreview.set('');
           this.file = undefined;
           if (this.audioInput) this.audioInput.nativeElement.value = '';
-          this.page.set(1);
           const coverFile = this.uploadCoverFile;
           if (coverFile) {
             this.uploadProgress.set(null);
@@ -480,9 +592,9 @@ export class TracksPageComponent implements OnDestroy {
         console.debug('[TracksPage] Piste supprimée', track.id);
         if (this.player.currentTrack()?.id === track.id) this.player.clear();
 
-        if (this.tracks().length === 1 && this.page() > 1) this.page.update((page) => page - 1);
         this.deletingTrackId.set('');
         this.showSnackbar('Suppression réussie', 'success');
+        this.loadTags();
         this.load();
       },
       error: (error: unknown) => {
