@@ -1,4 +1,4 @@
-<div class="music-scene" [class.is-playing]="player.playing()" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62">
+<div class="music-scene" [class.is-playing]="player.playing()" [class.training-active]="player.trainingMode()" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62">
 <svg class="bass-orb" viewBox="0 0 500 500" aria-hidden="true" focusable="false"
   [style.transform]="'translate(-50%, -50%)'">
   <defs>
@@ -17,13 +17,31 @@
   <circle cx="250" cy="250" r="165" fill="url(#bass-orb-gradient)" opacity="0.58" />
 </svg>
 <section class="now-playing-page card" [class.training-mode]="player.trainingMode()" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62" aria-labelledby="now-playing-title">
-  <a routerLink="/tracks">← Retour à la bibliothèque</a>
+  <div class="now-playing-header">
+    <a routerLink="/tracks">&#8592; Retour &agrave; la biblioth&egrave;que</a>
+    @if (player.currentTrack()) {
+      @if (player.trainingMode()) {
+        <button type="button" class="training-mode-toggle" (click)="player.stopTraining()">Quitter le mode entra&icirc;nement</button>
+      } @else {
+        <button type="button" class="training-mode-toggle" (click)="startTrainingCurrent()" [disabled]="player.loading()">Mode entra&icirc;nement</button>
+      }
+    }
+  </div>
   @if (player.currentTrack(); as track) {
     <h1 id="now-playing-title">Musique en cours</h1>
-    @if (player.cover()) { <img class="large-cover" [src]="player.cover()" [alt]="'Pochette de ' + track.title" /> }
-    @else { <div class="large-cover cover-placeholder" aria-hidden="true">♪</div> }
+    <div class="cover-volume-row">
+      <button type="button" class="transport-button volume-button" (click)="player.adjustVolume(-1)" [disabled]="player.volume() <= 0" [attr.aria-label]="'Diminuer le volume, actuellement ' + Math.round(player.volume() * 100) + ' pour cent'" title="Diminuer le volume">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9v6h4l5 4V5L7 9H3Z"/><path d="M18 12h4"/></svg>
+      </button>
+      @if (player.cover()) { <img class="large-cover" [src]="player.cover()" [alt]="'Pochette de ' + track.title" /> }
+      @else { <div class="large-cover cover-placeholder" aria-hidden="true">♪</div> }
+      <button type="button" class="transport-button volume-button" (click)="player.adjustVolume(1)" [disabled]="player.volume() >= 1" [attr.aria-label]="'Augmenter le volume, actuellement ' + Math.round(player.volume() * 100) + ' pour cent'" title="Augmenter le volume">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9v6h4l5 4V5L7 9H3Z"/><path d="M20 9v6m-3-3h6"/></svg>
+      </button>
+    </div>
     <h2>{{ track.title }}</h2>
     <p>{{ track.artist || 'Artiste inconnu' }}@if (track.album) { · {{ track.album }} }</p>
+    <div class="player-control-row">
     <div class="playback-controls">
       <button type="button" class="transport-button" (click)="player.previous()" [disabled]="!player.hasPrevious()" aria-label="Piste précédente" title="Piste précédente">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M19 6 8 12l11 6V6Z" /></svg>
@@ -55,6 +73,7 @@
           <path class="shuffle-arrowhead" d="m17 14 5 4-5 4Zm0-12 5 4-5 4Z" />
         </svg>
       </button>
+    </div>
     </div>
     <div class="timeline"><span>{{ player.formatTime(player.currentTime()) }}</span><input type="range" min="0" [max]="player.duration() || 0" [value]="player.currentTime()" (input)="player.seek($event)" aria-label="Position dans le morceau" /><span>{{ player.formatTime(player.duration()) }}</span></div>
     @if (player.trainingMode()) {
@@ -90,13 +109,8 @@
             <span>{{ player.loopEnd() === null ? '&#8212;:&#8212;' : player.formatTime(player.loopEnd() ?? 0) }}</span>
           </div>
         </div>
-        <div class="training-actions">
-          <button type="button" class="training-exit-button" (click)="player.stopTraining()">Quitter le mode entra&icirc;nement</button>
-        </div>
         <p class="training-help" aria-live="polite">{{ player.trainingMessage() || 'Place le morceau au début du passage, marque A, puis marque B à sa fin.' }}</p>
       </section>
-    } @else {
-      <button type="button" class="training-start-button" (click)="player.startTraining(track)" [disabled]="player.loading()">Mode entraînement</button>
     }
     @if (player.error()) { <p class="error" role="status">{{ player.error() }}</p> }
     <p class="queue-note">{{ player.queue().length }} piste(s) dans la sélection filtrée actuelle.</p>

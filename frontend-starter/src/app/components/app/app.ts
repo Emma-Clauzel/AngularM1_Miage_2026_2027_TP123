@@ -16,6 +16,7 @@ export class AppComponent {
   private readonly router = inject(Router);
 
   constructor() {
+    this.auth.restoreSession();
     try {
       this.darkTheme.set(localStorage.getItem('gpc-theme') === 'dark');
     } catch {

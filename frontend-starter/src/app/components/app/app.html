@@ -13,7 +13,10 @@
           <path class="bulb-outline" d="M9 18h6m-5 3h4m-6-6.2a7 7 0 1 1 8 0c-.8.6-1 1.4-1 2.2h-6c0-.8-.2-1.6-1-2.2Z" />
         </svg>
       </button>
-      <a routerLink="/profile">Profil</a>
+      <a routerLink="/profile" class="profile-nav-link">
+        <img [src]="'/avatars/' + (auth.currentUser()?.avatar || 'cat') + '.svg'" alt="" aria-hidden="true" />
+        <span>Profil</span>
+      </a>
       <button type="button" (click)="logout()">Déconnexion</button>
     } @else {
       <a routerLink="/login">Connexion</a>

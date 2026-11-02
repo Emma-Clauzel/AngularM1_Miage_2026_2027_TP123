@@ -11,6 +11,10 @@
   --surface: #ffffff;
   --surface-raised: #fffafd;
   --field-bg: #ffffff;
+  --track-delete-bg: #f8e3ec;
+  --track-delete-hover: #edc5d5;
+  --track-delete-text: #704052;
+  --favorite: #c18b00;
   font-family: Inter, system-ui, sans-serif;
   color: var(--text);
   background: var(--page-bg);
@@ -30,6 +34,10 @@
   --surface: #33252e;
   --surface-raised: #3c2b35;
   --field-bg: #281d24;
+  --track-delete-bg: #533342;
+  --track-delete-hover: #704858;
+  --track-delete-text: #f4dce6;
+  --favorite: #ffd45f;
 }
 
 * { box-sizing: border-box; }
@@ -121,10 +129,10 @@ html.dark-theme .training-panel .speed-step-button:hover:not(:disabled),
 html.dark-theme .training-panel .ab-loop-button:not(.active-option):hover:not(:disabled) { background: #704858; }
 html.dark-theme .training-panel .ab-loop-button.active-option { color: white; background: var(--rose); }
 
-html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(1) { stop-color: #181115; }
-html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(2) { stop-color: #302128; }
-html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(3) { stop-color: #1a1115; }
-html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(4) { stop-color: #2e2026; }
+html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(1) { stop-color: #633f55; }
+html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(2) { stop-color: #4b2a3f; }
+html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(3) { stop-color: #391c2d; }
+html.dark-theme .bass-orb #bass-orb-gradient stop:nth-child(4) { stop-color: #2a1823; }
 
 html.dark-theme .search-panel input,
 html.dark-theme .search-panel select,
@@ -167,6 +175,35 @@ html.dark-theme .playback-options .option-button {
   background: #533342;
 }
 html.dark-theme .playback-options button.active-option { color: white; background: var(--rose); }
+html.dark-theme .now-playing-page .transport-button,
+html.dark-theme .now-playing-page .playback-options .option-button,
+html.dark-theme .now-playing-page .training-panel .marker-button,
+html.dark-theme .now-playing-page .training-panel .speed-step-button,
+html.dark-theme .now-playing-page .training-panel .ab-loop-button {
+  color: #f4dce6;
+  border-color: var(--rose-border);
+  background-color: #533342;
+}
+html.dark-theme .now-playing-page .transport-button.is-playing { background-color: #704858; }
+html.dark-theme .now-playing-page .playback-options .option-button.active-option,
+html.dark-theme .now-playing-page .training-panel .ab-loop-button.active-option {
+  color: white;
+  background-color: var(--rose);
+}
+html.dark-theme .now-playing-page .transport-button:hover:not(:disabled),
+html.dark-theme .now-playing-page .playback-options .option-button:hover:not(.active-option),
+html.dark-theme .now-playing-page .training-panel .marker-button:hover:not(:disabled),
+html.dark-theme .now-playing-page .training-panel .speed-step-button:hover:not(:disabled),
+html.dark-theme .now-playing-page .training-panel .ab-loop-button:not(.active-option):hover:not(:disabled) {
+  background-color: #704858;
+}
+html.dark-theme .now-playing-page .transport-button:disabled {
+  color: #f4dce6;
+  border-color: var(--rose-border);
+  background-color: #533342;
+}
+html.dark-theme .now-playing-page .playback-options .option-button.active-option:hover,
+html.dark-theme .now-playing-page .training-panel .ab-loop-button.active-option:hover { background-color: var(--rose-hover); }
 html.dark-theme .now-playing-cover-link,
 html.dark-theme .mini-cover-placeholder,
 html.dark-theme .cover-placeholder { color: #e8abc2; background-color: #4a303d; }

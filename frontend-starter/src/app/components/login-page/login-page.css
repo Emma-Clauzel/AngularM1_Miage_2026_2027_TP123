@@ -1,1 +1,28 @@
-:host { display: block; max-width: 520px; margin: 0 auto; }
+:host { display: block; width: 100%; max-width: none; margin: 0; }
+.login-layout { position: relative; left: 50%; width: calc(100vw - 2rem); transform: translateX(-50%); }
+.login-card { width: min(100%, 520px); margin-inline: auto; }
+.accounts-panel { position: absolute; top: 0; right: 0; width: 17rem; max-height: 78dvh; overflow: auto; padding: 1rem; color: var(--text); border: 1px solid var(--rose-border); border-radius: 16px; background: var(--surface-raised); box-shadow: 0 8px 25px #70405214; }
+.accounts-panel h2 { margin: 0 0 0.85rem; font-size: 1.15rem; }
+.accounts-list { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.account-item { display: flex; min-height: 4rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.45rem 0.6rem; overflow-wrap: anywhere; border: 1px solid var(--rose-border); border-radius: 12px; background: var(--surface); font-weight: 600; }
+.account-info { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 0.75rem; padding: 0.2rem 0.35rem; color: var(--text); border: 0; border-radius: 8px; background: transparent; font: inherit; text-align: left; }
+.account-info:hover:not(:disabled), .account-info.account-selected { background: var(--rose-light); }
+.account-info:focus-visible { outline: 2px solid var(--rose); outline-offset: 1px; }
+.account-item img { display: block; width: 3rem; height: 3rem; flex: 0 0 auto; border-radius: 10px; }
+.account-item span { overflow-wrap: anywhere; }
+.delete-account-button { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; padding: 0.5rem; color: var(--track-delete-text); border: 1px solid var(--rose-border); border-radius: 8px; background: var(--track-delete-bg); }
+.delete-account-button:hover:not(:disabled) { background: var(--track-delete-hover); }
+.delete-account-button svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.delete-account-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1.5rem; color: var(--text); border: 1px solid var(--rose-border); border-radius: 16px; background: var(--surface-raised); box-shadow: 0 18px 55px #49323f40; }
+.delete-account-dialog::backdrop { background: rgb(15 8 12 / 70%); backdrop-filter: blur(2px); }
+.delete-account-dialog h2 { margin: 0 0 0.75rem; }
+.delete-account-dialog p { line-height: 1.5; }
+.delete-account-dialog label { display: block; margin: 1rem 0 0.35rem; font-weight: 600; }
+.delete-account-dialog input { width: 100%; padding: 0.65rem; color: var(--text); border: 1px solid var(--rose-border); border-radius: 8px; background: var(--field-bg); }
+.delete-account-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem; }
+.delete-account-actions .cancel-button { color: var(--text); border: 1px solid var(--rose-border); background: var(--surface); }
+.delete-account-actions .cancel-button:hover:not(:disabled) { background: var(--rose-light); }
+.delete-account-actions .confirm-delete-button { background: #9e345f; }
+.delete-account-actions .confirm-delete-button:hover:not(:disabled) { background: #7f2349; }
+.delete-account-error { color: #c43d52; }
+@media (max-width: 1050px) { .login-layout { left: 50%; display: grid; width: min(520px, calc(100vw - 2rem)); grid-template-columns: minmax(0, 1fr); gap: 1rem; transform: translateX(-50%); } .accounts-panel { position: static; width: 100%; max-height: 40dvh; } }

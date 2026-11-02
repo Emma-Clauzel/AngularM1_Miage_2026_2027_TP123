@@ -1,14 +1,32 @@
 <section class="card">
+  <a routerLink="/tracks" class="library-button">&#8592; Retour &agrave; la biblioth&egrave;que</a>
   <h1>Mon profil</h1>
-  <button type="button" (click)="load()">Charger mon profil</button>
+  <button type="button" (click)="load()" [disabled]="loading() || saving()">
+    @if (loading()) { Chargement du profil… } @else { Actualiser le profil }
+  </button>
+  @if (loading()) { <p role="status" aria-live="polite">Récupération des informations du compte…</p> }
+  @if (message()) { <p class="profile-message" role="status" aria-live="polite">{{ message() }}</p> }
+  @if (error()) { <p class="profile-error" role="alert">{{ error() }}</p> }
   @if (auth.currentUser(); as user) {
-    <p>
-      <b>{{ user.name }}</b><br />{{ user.email }}<br />
-      Membre depuis {{ user.createdAt.slice(0, 10) }}
-    </p>
-    <form [formGroup]="form" (ngSubmit)="save()">
-      <label>Nouveau nom<input formControlName="name" /></label>
-      <button type="submit">Enregistrer</button>
+    <div class="profile-identity">
+      <img class="profile-avatar" [src]="'/avatars/' + (user.avatar || 'cat') + '.svg'" [alt]="'Photo de profil de ' + user.name" />
+      <p class="profile-details">
+        <b>{{ user.name }}</b><br />{{ user.email }}<br />
+        Membre depuis {{ user.createdAt.slice(0, 10) }}
+      </p>
+    </div>
+    <form class="profile-form" [formGroup]="form" (ngSubmit)="save()">
+      <label for="profile-name">Nouveau nom</label>
+      <input id="profile-name" formControlName="name" autocomplete="name" />
+      @if (form.controls.name.touched && form.controls.name.invalid) {
+        <p class="profile-error" role="alert">Le nom ne peut pas être vide.</p>
+      }
+      <app-avatar-picker [value]="form.controls.avatar.value" [buttonLabel]="'Modifier la photo de profil'" (valueChange)="setAvatar($event)" />
+      <button type="submit" [disabled]="form.invalid || !form.dirty || saving() || loading()">
+        @if (saving()) { Enregistrement… } @else { Enregistrer }
+      </button>
     </form>
+  } @else if (!loading() && !error()) {
+    <p>Ton profil n’a pas encore été chargé.</p>
   }
 </section>

@@ -21,6 +21,7 @@ const schema = new mongoose.Schema(
     artist: { type: String, trim: true, default: "", maxlength: 200 },
     album: { type: String, trim: true, default: "", maxlength: 200 },
     releaseYear: { type: String, trim: true, default: "", maxlength: 10 },
+    isFavorite: { type: Boolean, default: false },
     tags: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }], default: [] },
     cover: {
       storedName: { type: String, default: "" },
@@ -54,6 +55,7 @@ schema.methods.toPublic = function () {
     artist: this.artist,
     album: this.album,
     releaseYear: this.releaseYear,
+    isFavorite: Boolean(this.isFavorite),
     tags: Array.isArray(this.tags) ? this.tags
       .filter((tag) => tag && typeof tag === "object" && tag.name)
       .map((tag) => ({ id: String(tag._id), name: tag.name, icon: tag.icon, color: tag.color })) : [],

@@ -1,6 +1,6 @@
 import { HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { Component, computed, effect, ElementRef, inject, OnDestroy, signal, ViewChild, WritableSignal } from '@angular/core';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { CoverSuggestion, Track } from '../../shared/models/track.model';
 import { TAG_COLOR_OPTIONS, TAG_ICON_OPTIONS, Tag, TagIcon, TagInput } from '../../shared/models/tag.model';
 import { TrackService } from '../../shared/services/track.service';
@@ -17,7 +17,7 @@ const ALLOWED_AUDIO_TYPES = new Set([
 ]);
 
 @Component({
-  imports: [ReactiveFormsModule],
+  imports: [FormsModule, ReactiveFormsModule],
   templateUrl: './tracks-page.html',
   styleUrl: './tracks-page.css',
 })
@@ -28,6 +28,7 @@ export class TracksPageComponent implements OnDestroy {
   @ViewChild('audioInput') private audioInput?: ElementRef<HTMLInputElement>;
   @ViewChild('uploadCoverInput') private uploadCoverInput?: ElementRef<HTMLInputElement>;
   @ViewChild('deleteDialog') private deleteDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('editTrackDialog') private editTrackDialog?: ElementRef<HTMLDialogElement>;
   @ViewChild('coverDialog') private coverDialog?: ElementRef<HTMLDialogElement>;
   @ViewChild('tagDialog') private tagDialog?: ElementRef<HTMLDialogElement>;
   @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
@@ -42,9 +43,16 @@ export class TracksPageComponent implements OnDestroy {
   readonly uploadSuccess = signal('');
   readonly metadataLoading = signal(false);
   readonly embeddedCoverPreview = signal('');
+  readonly embeddedCoverDismissed = signal(false);
   readonly deletingTrackId = signal('');
   readonly deleteError = signal('');
   readonly trackPendingDeletion = signal<Track | null>(null);
+  readonly trackPendingEdit = signal<Track | null>(null);
+  readonly editTrackTitle = signal('');
+  readonly editTrackArtist = signal('');
+  readonly editTrackAlbum = signal('');
+  readonly editTrackSaving = signal(false);
+  readonly editTrackError = signal('');
   readonly coverImages = signal<Record<string, string>>({});
   readonly coverManagerTrack = signal<Track | null>(null);
   readonly coverSuggestions = signal<CoverSuggestion[]>([]);
@@ -73,6 +81,8 @@ export class TracksPageComponent implements OnDestroy {
   readonly searchTerm = signal('');
   readonly artistFilter = signal('');
   readonly selectedTagId = signal('');
+  readonly favoriteFilter = signal<'all' | 'favorites'>('all');
+  readonly favoriteSavingIds = signal<Set<string>>(new Set());
   readonly tags = signal<Tag[]>([]);
   readonly allTracks = signal<Track[]>([]);
   readonly allTracksLoading = signal(false);
@@ -96,7 +106,8 @@ export class TracksPageComponent implements OnDestroy {
     return this.tracks().filter((track) => {
       const matchesTerm = !term || `${track.title} ${track.originalName}`.toLocaleLowerCase('fr').includes(term);
       const matchesArtist = !artist || (track.artist ?? '').toLocaleLowerCase('fr').includes(artist);
-      return matchesTerm && matchesArtist;
+      const matchesFavorite = this.favoriteFilter() === 'all' || !!track.isFavorite;
+      return matchesTerm && matchesArtist && matchesFavorite;
     });
   });
   readonly title = new FormControl('', { nonNullable: true });
@@ -117,6 +128,7 @@ export class TracksPageComponent implements OnDestroy {
     this.title.setValue('');
     this.artist.setValue('');
     this.embeddedCoverPreview.set('');
+    this.embeddedCoverDismissed.set(false);
     if (this.file && !this.uploadError()) {
       const selectedFile = this.file;
       this.metadataLoading.set(true);
@@ -165,6 +177,7 @@ export class TracksPageComponent implements OnDestroy {
   resetFilters(): void {
     this.searchTerm.set('');
     this.artistFilter.set('');
+    this.favoriteFilter.set('all');
     if (this.selectedTagId()) {
       this.selectedTagId.set('');
       this.load();
@@ -180,6 +193,10 @@ export class TracksPageComponent implements OnDestroy {
   setTagFilter(event: Event): void {
     this.selectedTagId.set((event.target as HTMLSelectElement).value);
     this.load();
+  }
+
+  setFavoriteFilter(event: Event): void {
+    this.favoriteFilter.set((event.target as HTMLSelectElement).value as 'all' | 'favorites');
   }
 
   loadTags(): void {
@@ -438,6 +455,33 @@ export class TracksPageComponent implements OnDestroy {
     });
   }
 
+  removeCurrentCover(): void {
+    const track = this.coverManagerTrack();
+    if (!track?.cover || this.coverSaving()) return;
+    this.coverSaving.set(true);
+    this.coverError.set('');
+    this.service.removeCover(track.id).subscribe({
+      next: () => {
+        const previous = this.coverImages()[track.id];
+        if (previous) URL.revokeObjectURL(previous);
+        this.coverImages.update((images) => {
+          const { [track.id]: _removed, ...remaining } = images;
+          return remaining;
+        });
+        const updated = { ...track, cover: null };
+        this.tracks.update((tracks) => tracks.map((item) => item.id === track.id ? { ...item, cover: null } : item));
+        this.coverManagerTrack.set(updated);
+        this.coverError.set('Pochette supprimée.');
+        this.coverSaving.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Suppression de pochette impossible', error);
+        this.coverError.set(this.serverMessage(error, 'Impossible de retirer cette pochette.'));
+        this.coverSaving.set(false);
+      },
+    });
+  }
+
   private coverSaved(updated: Track): void {
     console.debug('[TracksPage] Pochette enregistrée', updated.id);
     this.tracks.update((tracks) => tracks.map((track) => track.id === updated.id ? { ...track, ...updated, tags: track.tags ?? updated.tags } : track));
@@ -494,7 +538,7 @@ export class TracksPageComponent implements OnDestroy {
     const trackTitle = this.title.value.trim();
     const trackArtist = this.artist.value.trim();
 
-    this.service.upload(selectedFile, trackTitle, trackArtist).subscribe({
+    this.service.upload(selectedFile, trackTitle, trackArtist, this.embeddedCoverDismissed()).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress) {
           const total = event.total;
@@ -521,7 +565,9 @@ export class TracksPageComponent implements OnDestroy {
           this.uploadProgress.set(100);
           this.title.setValue('');
           this.artist.setValue('');
+          const dismissedEmbeddedCover = this.embeddedCoverDismissed();
           this.embeddedCoverPreview.set('');
+          this.embeddedCoverDismissed.set(false);
           this.file = undefined;
           if (this.audioInput) this.audioInput.nativeElement.value = '';
           const coverFile = this.uploadCoverFile;
@@ -539,6 +585,26 @@ export class TracksPageComponent implements OnDestroy {
               error: (coverError: unknown) => {
                 console.error('[TracksPage] Audio importé, mais couverture non enregistrée', coverError);
                 this.uploadError.set(`Le morceau « ${track.title} » est importé, mais sa couverture n’a pas été enregistrée. Vous pourrez la réessayer en cliquant sur sa pochette.`);
+                this.uploadLoading.set(false);
+                this.load();
+              },
+            });
+          } else if (dismissedEmbeddedCover) {
+            this.uploadProgress.set(null);
+            this.service.removeCover(track.id).subscribe({
+              next: () => {
+                this.uploadSuccess.set(`« ${track.title} » a été importé sans pochette.`);
+                this.uploadLoading.set(false);
+                this.load();
+              },
+              error: (coverError: unknown) => {
+                console.error('[TracksPage] Suppression de la pochette refusée', coverError);
+                const detail = coverError instanceof HttpErrorResponse && coverError.status === 0
+                  ? 'Le backend est injoignable. Vérifie qu’il est lancé.'
+                  : coverError instanceof HttpErrorResponse && coverError.status === 404 && typeof coverError.error?.message !== 'string'
+                    ? 'La route de retrait de pochette n’est pas chargée. Arrête puis redémarre le backend.'
+                    : this.serverMessage(coverError, 'Réessaie depuis la bibliothèque.');
+                this.uploadError.set(`« ${track.title} » a été importé, mais la pochette n’a pas pu être retirée. ${detail}`);
                 this.uploadLoading.set(false);
                 this.load();
               },
@@ -566,6 +632,97 @@ export class TracksPageComponent implements OnDestroy {
 
   play(track: Track): void {
     this.player.play(track);
+  }
+
+  openTrackEditor(track: Track): void {
+    this.trackPendingEdit.set(track);
+    this.editTrackTitle.set(track.title);
+    this.editTrackArtist.set(track.artist ?? '');
+    this.editTrackAlbum.set(track.album ?? '');
+    this.editTrackError.set('');
+    this.editTrackDialog?.nativeElement.showModal();
+  }
+
+  closeTrackEditor(): void {
+    if (this.editTrackDialog?.nativeElement.open) this.editTrackDialog.nativeElement.close();
+    this.trackPendingEdit.set(null);
+    this.editTrackError.set('');
+  }
+
+  updateTrackEdit(field: 'title' | 'artist' | 'album', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (field === 'title') this.editTrackTitle.set(value);
+    else if (field === 'artist') this.editTrackArtist.set(value);
+    else this.editTrackAlbum.set(value);
+  }
+
+  saveTrackMetadata(): void {
+    const track = this.trackPendingEdit();
+    const title = this.editTrackTitle().trim();
+    const artist = this.editTrackArtist().trim();
+    const album = this.editTrackAlbum().trim();
+    if (!track || this.editTrackSaving()) return;
+    if (!title) {
+      this.editTrackError.set('Le titre du morceau est obligatoire.');
+      return;
+    }
+    if ([title, artist, album].some((value) => value.length > 200)) {
+      this.editTrackError.set('Chaque champ ne peut pas dépasser 200 caractères.');
+      return;
+    }
+
+    this.editTrackSaving.set(true);
+    this.editTrackError.set('');
+    this.service.updateMetadata(track.id, { title, artist, album }).subscribe({
+      next: (updated) => {
+        const merged = { ...track, ...updated, tags: track.tags ?? updated.tags };
+        this.tracks.update((tracks) => tracks.map((item) => item.id === merged.id ? merged : item));
+        this.allTracks.update((tracks) => tracks.map((item) => item.id === merged.id ? merged : item));
+        this.player.syncTrackMetadata(merged);
+        this.editTrackSaving.set(false);
+        this.closeTrackEditor();
+        this.showSnackbar('Informations du morceau mises à jour.', 'success');
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Modification des informations impossible', error);
+        this.editTrackError.set(this.serverMessage(error, 'Impossible d’enregistrer les informations du morceau.'));
+        this.editTrackSaving.set(false);
+      },
+    });
+  }
+
+  toggleFavorite(track: Track): void {
+    if (this.favoriteSavingIds().has(track.id)) return;
+    const isFavorite = !track.isFavorite;
+    this.favoriteSavingIds.update((ids) => new Set(ids).add(track.id));
+    this.service.setFavorite(track.id, isFavorite).subscribe({
+      next: (updated) => {
+        const merged = { ...track, ...updated, tags: track.tags ?? updated.tags };
+        this.tracks.update((tracks) => tracks.map((item) => item.id === track.id ? merged : item));
+        this.allTracks.update((tracks) => tracks.map((item) => item.id === track.id ? merged : item));
+        this.player.syncTrackMetadata(merged);
+        this.showSnackbar(isFavorite ? 'Ajouté aux favoris.' : 'Retiré des favoris.', 'success');
+        this.favoriteSavingIds.update((ids) => {
+          const updatedIds = new Set(ids);
+          updatedIds.delete(track.id);
+          return updatedIds;
+        });
+      },
+      error: (error: unknown) => {
+        console.error('[TracksPage] Modification du favori impossible', error);
+        this.showSnackbar(this.serverMessage(error, 'Impossible de modifier ce favori.'), 'error');
+        this.favoriteSavingIds.update((ids) => {
+          const updatedIds = new Set(ids);
+          updatedIds.delete(track.id);
+          return updatedIds;
+        });
+      },
+    });
+  }
+
+  removeEmbeddedCover(): void {
+    this.embeddedCoverPreview.set('');
+    this.embeddedCoverDismissed.set(true);
   }
 
   requestDelete(track: Track): void {

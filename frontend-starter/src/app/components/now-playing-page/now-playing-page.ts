@@ -4,6 +4,7 @@ import { MusicPlayerService } from '../../shared/services/music-player.service';
 @Component({ imports: [RouterLink], templateUrl: './now-playing-page.html', styleUrl: './now-playing-page.css' })
 export class NowPlayingPageComponent {
   readonly player = inject(MusicPlayerService);
+  readonly Math = Math;
   readonly spikePath = computed(() => {
     const levels = this.player.bassBands();
     const overall = this.player.audioLevel();
@@ -23,4 +24,9 @@ export class NowPlayingPageComponent {
     }
     return `${points.join(' ')}Z`;
   });
+
+  startTrainingCurrent(): void {
+    const track = this.player.currentTrack();
+    if (track) this.player.startTraining(track);
+  }
 }

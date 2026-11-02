@@ -231,4 +231,22 @@ Pour chaque mission, consigner l'objectif, le prompt principal, le plan, les vé
 - **Présentation :** la pochette est réduite en mode entraînement; les commandes A, B, boucle et vitesse sont compactes et assorties. Les couleurs de l’encadré et des boutons s’adaptent au mode sombre.
 - **Fichiers modifiés :** `frontend-starter/src/app/shared/services/music-player.service.ts` (vitesse, marqueurs et boucle); `frontend-starter/src/app/components/now-playing-page/now-playing-page.html` et `.css` (commandes et présentation); `frontend-starter/src/styles.css` (couleurs du thème sombre).
 - **Vérification :** aucune compilation ni vérification manuelle n’a été lancée pour cette modification; vérifier les paliers de vitesse, la boucle A–B et les couleurs dans les deux thèmes.
-- **Ce que chaque membre sait maintenant expliquer sans l’agent :** comment le service modifie `HTMLAudioElement.playbackRate`, comment les positions A et B sont conservées et comment lévénement `timeupdate` ramène la lecture au point A.
+- **Ce que chaque membre sait maintenant expliquer sans l’agent :** comment le service modifie `HTMLAudioElement.playbackRate`, comment les positions A et B sont conservées et comment l’événement `timeupdate` ramène la lecture au point A.
+
+## Améliorations — Modification des pistes et favoris
+
+### Modifier les informations d’une piste
+
+- **Demande :** pouvoir corriger le titre, l’artiste et l’album d’un morceau après son import.
+- **Fonctionnement :** le bouton de modification ouvre une fenêtre de saisie préremplie. Le titre est obligatoire; les trois champs sont limités à 200 caractères. Après validation, le frontend envoie les nouvelles valeurs au backend, qui vérifie les données et ne modifie qu’une piste appartenant au compte connecté. La bibliothèque et le lecteur en cours sont ensuite synchronisés.
+- **Fichiers modifiés :** `backend/src/app.js` (route authentifiée `PUT /api/tracks/:id`); `frontend-starter/src/app/shared/services/track.service.ts` (appel HTTP); `frontend-starter/src/app/components/tracks-page/tracks-page.ts`, `.html` et `.css` (fenêtre, validation et mise à jour de l’affichage); `frontend-starter/src/app/shared/services/music-player.service.ts` (synchronisation des informations du morceau en cours).
+- **Vérification :** aucune compilation ni vérification manuelle n’a été lancée pour cette modification. Vérifier la sauvegarde, les validations, le refus d’une piste appartenant à un autre compte et l’actualisation du titre affiché dans le lecteur.
+- **Ce que chaque membre sait maintenant expliquer sans l’agent :** pourquoi la validation est faite côté frontend et côté backend, comment `PUT` met à jour les informations, et pourquoi la requête filtre aussi par propriétaire.
+
+### Mettre une piste en favori et filtrer la bibliothèque
+
+- **Demande :** ajouter une étoile en haut à droite de chaque carte; au clic, la remplir en jaune et proposer un filtre « Favori » au même niveau que le filtre par tag.
+- **Fonctionnement :** l’état `isFavorite` est enregistré sur chaque piste et vaut `false` par défaut. Le clic envoie une requête authentifiée `PATCH /api/tracks/:id/favorite`; l’API vérifie que la valeur reçue est booléenne et que la piste appartient au compte connecté. Le frontend affiche une étoile vide ou jaune, bloque temporairement les clics répétés pendant l’enregistrement et synchronise la bibliothèque ainsi que le lecteur. Le menu « Favoris » permet d’afficher toutes les pistes ou uniquement les pistes favorites; la remise à zéro des filtres revient à toutes les pistes.
+- **Fichiers modifiés :** `backend/src/models/Track.js` et `backend/src/app.js` (champ, sérialisation et route); `frontend-starter/src/app/shared/models/track.model.ts`, `frontend-starter/src/app/shared/services/track.service.ts`, `frontend-starter/src/app/components/tracks-page/tracks-page.ts`, `tracks-page.html` et `tracks-page.css`; `frontend-starter/src/styles.css` (couleur de l’étoile adaptée aux thèmes clair et sombre).
+- **Vérification :** aucune compilation ni vérification manuelle n’a été lancée pour cette modification. Redémarrer le backend si nécessaire, puis vérifier l’ajout/retrait d’un favori, sa conservation après rechargement, le filtre, le changement de compte et le rendu des deux thèmes.
+- **Ce que chaque membre sait maintenant expliquer sans l’agent :** comment l’état favori est persisté en base, comment la route protège les données par propriétaire et comment le filtre dérive la liste affichée sans supprimer les pistes de la bibliothèque.

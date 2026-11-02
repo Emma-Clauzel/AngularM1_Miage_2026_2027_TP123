@@ -44,17 +44,26 @@ export class TrackService {
     return this.http.delete<void>(`/api/tags/${id}`);
   }
 
+  updateMetadata(id: string, metadata: { title: string; artist: string; album: string }) {
+    return this.http.put<Track>(`/api/tracks/${id}`, metadata);
+  }
+
+  setFavorite(id: string, isFavorite: boolean) {
+    return this.http.patch<Track>(`/api/tracks/${id}/favorite`, { isFavorite });
+  }
+
   inspectAudio(file: File) {
     const body = new FormData();
     body.append('audio', file);
     return this.http.post<{ title: string; artist: string; album: string; releaseYear: string; embeddedCoverDataUrl: string }>('/api/tracks/metadata', body);
   }
 
-  upload(file: File, title: string, artist: string) {
+  upload(file: File, title: string, artist: string, ignoreEmbeddedCover = false) {
     const body = new FormData();
     body.append('audio', file);
     if (title.trim()) body.append('title', title.trim());
     if (artist.trim()) body.append('artist', artist.trim());
+    body.append('ignoreEmbeddedCover', String(ignoreEmbeddedCover));
     return this.http.post<Track>('/api/tracks', body, {
       observe: 'events',
       reportProgress: true,
@@ -68,7 +77,12 @@ export class TrackService {
   }
 
   cover(id: string) {
-    return this.http.get(`/api/tracks/${id}/cover`, { responseType: 'blob' });
+    // L'URL de la pochette reste identique quand on remplace l'image.
+    // Ce paramètre empêche le navigateur de réutiliser l'ancien Blob en cache.
+    return this.http.get(`/api/tracks/${id}/cover`, {
+      params: { v: Date.now() },
+      responseType: 'blob',
+    });
   }
 
   coverSuggestions(id: string, metadata: { title: string; artist: string; album: string }) {
@@ -88,6 +102,10 @@ export class TrackService {
     body.append('cover', file);
     body.append('rightsConfirmed', 'true');
     return this.http.post<Track>(`/api/tracks/${id}/cover/upload`, body);
+  }
+
+  removeCover(id: string) {
+    return this.http.delete<void>(`/api/tracks/${id}/cover`);
   }
 
   delete(id: string) {

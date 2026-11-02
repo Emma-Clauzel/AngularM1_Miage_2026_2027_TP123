@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+export const PROFILE_AVATARS = ["cat", "fox", "panda", "rabbit", "bear", "raccoon", "owl", "frog", "penguin", "koala"];
+
 /*
  * Un schéma Mongoose décrit la forme des documents MongoDB et leurs règles de
  * validation. `timestamps` ajoute automatiquement createdAt et updatedAt.
@@ -15,6 +17,7 @@ const schema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    avatar: { type: String, enum: PROFILE_AVATARS, default: "cat" },
     // select:false empêche de renvoyer le hash par défaut dans les requêtes.
     passwordHash: { type: String, required: true, select: false },
   },
@@ -54,6 +57,7 @@ schema.methods.toPublic = function () {
     id: this.id,
     name: this.name,
     email: this.email,
+    avatar: this.avatar,
     createdAt: this.createdAt,
   };
 };

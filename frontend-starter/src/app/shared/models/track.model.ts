@@ -9,6 +9,7 @@ export interface Track {
   artist?: string;
   album?: string;
   releaseYear?: string;
+  isFavorite?: boolean;
   cover: {
     mimeType: string;
     source: 'embedded' | 'upload' | 'cover-art-archive';

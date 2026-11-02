@@ -4,6 +4,7 @@
     <label>Nom<input formControlName="name" /></label>
     <label>Email<input type="email" formControlName="email" /></label>
     <label>Mot de passe<input type="password" formControlName="password" /></label>
+    <app-avatar-picker [value]="form.controls.avatar.value" [buttonLabel]="'Choisir une photo de profil'" (valueChange)="setAvatar($event)" />
     <button type="submit">Créer mon compte</button>
   </form>
   @if (error()) {

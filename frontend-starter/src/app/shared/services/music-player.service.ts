@@ -21,6 +21,7 @@ export class MusicPlayerService {
   readonly queue = signal<Track[]>([]);
   readonly loading = signal(false);
   readonly playing = signal(false);
+  readonly volume = signal(1);
   readonly error = signal('');
   readonly cover = signal('');
   readonly currentTime = signal(0);
@@ -49,7 +50,7 @@ export class MusicPlayerService {
 
   constructor() {
     if (typeof Audio !== 'undefined') {
-      this.audio = new Audio(); this.audio.preload = 'auto';
+      this.audio = new Audio(); this.audio.preload = 'auto'; this.audio.volume = this.volume();
       this.audio.addEventListener('play', () => {
         this.playing.set(true);
         this.startBassMeter();
@@ -93,7 +94,16 @@ export class MusicPlayerService {
       this.shuffledRemaining.push(...this.shuffleIds(addedIds));
     }
   }
+  syncTrackMetadata(track: Track): void {
+    if (this.currentTrack()?.id === track.id) this.currentTrack.set(track);
+    this.queue.update((tracks) => tracks.map((item) => item.id === track.id ? { ...item, ...track } : item));
+  }
   cycleLoopMode(): void { this.loopMode.update((mode) => mode === 'off' ? 'all' : mode === 'all' ? 'one' : 'off'); }
+  adjustVolume(step: -1 | 1): void {
+    const nextVolume = Math.max(0, Math.min(1, Math.round((this.volume() + step * 0.1) * 10) / 10));
+    this.volume.set(nextVolume);
+    if (this.audio) this.audio.volume = nextVolume;
+  }
   toggleShuffle(): void {
     this.shuffle.update((enabled) => !enabled);
     this.shuffledRemaining = this.shuffle() ? this.makeShuffleQueue() : [];
@@ -115,9 +125,18 @@ export class MusicPlayerService {
     });
   }
   startTraining(track: Track): void {
+    const preservePause = this.currentTrack()?.id === track.id && !!this.audioUrl && this.audio?.paused === true;
     this.stopTraining();
     this.playbackRate.set(1);
     if (this.audio) this.audio.playbackRate = 1;
+    if (preservePause) {
+      this.trainingMode.set(true);
+      this.loopStart.set(null);
+      this.loopEnd.set(null);
+      this.loopABActive.set(false);
+      this.trainingMessage.set('');
+      return;
+    }
     this.play(track, true);
   }
   stopTraining(): void {

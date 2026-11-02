@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#dff0d9"/>
+  <!-- Pattes et petite queue visibles autour de la carapace -->
+  <path d="m35 76-17 8c-5 3-7 10-3 14 5 5 14 2 20-3l9-7Zm58 0 17 8c5 3 7 10 3 14-5 5-14 2-20-3l-9-7ZM64 94l-8 15c-2 5 2 10 8 10s10-5 8-10Z" fill="#72b879" stroke="#376b4b" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Carapace bombée avec plaques -->
+  <path d="M23 76c0-27 17-45 41-45s41 18 41 45c0 13-18 23-41 23S23 89 23 76Z" fill="#a87945" stroke="#59452f" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M64 34v61M27 66l28 10m46-10L73 76M40 43l15 33m33-33L73 76M38 88l17-12m35 12L73 76" fill="none" stroke="#d3a66a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M64 34c-9 0-17 2-23 7l14 35 9 0 9 0 14-35c-6-5-14-7-23-7Z" fill="#c49358" stroke="#59452f" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Tête qui ressort au-dessus de la carapace -->
+  <path d="M39 47c0-17 10-27 25-27s25 10 25 27v8c0 12-11 20-25 20S39 67 39 55Z" fill="#8dce8e" stroke="#376b4b" stroke-width="4" stroke-linejoin="round"/>
+  <ellipse cx="51" cy="48" rx="7" ry="9" fill="#fffaf0"/><ellipse cx="77" cy="48" rx="7" ry="9" fill="#fffaf0"/>
+  <circle cx="53" cy="49" r="4" fill="#38202c"/><circle cx="75" cy="49" r="4" fill="#38202c"/>
+  <circle cx="54" cy="47" r="1.5" fill="#fffaf0"/><circle cx="76" cy="47" r="1.5" fill="#fffaf0"/>
+  <path d="M58 60c3 3 9 3 12 0" fill="none" stroke="#376b4b" stroke-width="3" stroke-linecap="round"/>
+</svg>

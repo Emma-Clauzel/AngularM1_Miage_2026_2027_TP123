@@ -1,8 +1,9 @@
-<section class="card">
+<div class="login-layout">
+<section class="card login-card">
   <h1>Connexion</h1>
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <label>Email<input type="email" formControlName="email" /></label>
-    <label>Mot de passe<input type="password" formControlName="password" /></label>
+  <form [formGroup]="form" (ngSubmit)="submit()" autocomplete="off">
+    <label>Email<input type="email" formControlName="email" name="gpc-login-email" autocomplete="off" /></label>
+    <label>Mot de passe<input type="password" formControlName="password" name="gpc-login-password" autocomplete="new-password" /></label>
     <button type="submit">Se connecter</button>
   </form>
   @if (error()) {
@@ -10,3 +11,45 @@
   }
   <p><a routerLink="/register">Créer un compte</a></p>
 </section>
+<aside class="accounts-panel" aria-labelledby="accounts-title">
+  <h2 id="accounts-title">Comptes cr&eacute;&eacute;s</h2>
+  @if (accountsLoading()) {
+    <p role="status">Chargement des comptes...</p>
+  } @else if (accountsFailed()) {
+    <p>Impossible de charger les comptes.</p>
+  } @else if (accounts().length) {
+    <ul class="accounts-list">
+      @for (account of accounts(); track account.id) {
+        <li class="account-item">
+          <button type="button" class="account-info" [class.account-selected]="form.controls.email.value === account.email" [attr.aria-pressed]="form.controls.email.value === account.email" [attr.aria-label]="'Utiliser le compte ' + account.name" (click)="selectAccount(account)">
+            <img [src]="'/avatars/' + (account.avatar || 'cat') + '.svg'" alt="" aria-hidden="true" />
+            <span>{{ account.name }}</span>
+          </button>
+          @if (account.deletable !== false) {
+            <button type="button" class="delete-account-button" (click)="openDeleteDialog(account)" [disabled]="deletingAccount()" [attr.aria-label]="'Supprimer le compte de ' + account.name" [title]="'Supprimer le compte de ' + account.name">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg>
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  } @else {
+    <p>Aucun compte n'a encore &eacute;t&eacute; cr&eacute;&eacute;.</p>
+  }
+</aside>
+</div>
+<dialog #deleteAccountDialog class="delete-account-dialog" aria-labelledby="delete-account-title" (cancel)="handleDialogCancel($event)">
+  <h2 id="delete-account-title">Supprimer le compte ?</h2>
+  @if (pendingAccount(); as account) {
+    <p>Le compte <strong>{{ account.name }}</strong> et sa bibliothèque seront supprimés définitivement.</p>
+    <label for="delete-account-password">Mot de passe du compte</label>
+    <input id="delete-account-password" type="password" autocomplete="current-password" [value]="deletePassword()" (input)="setDeletePassword($event)" [disabled]="deletingAccount()" />
+    @if (deleteError()) { <p class="delete-account-error" role="alert">{{ deleteError() }}</p> }
+    <div class="delete-account-actions">
+      <button type="button" class="cancel-button" (click)="cancelDelete()" [disabled]="deletingAccount()">Annuler</button>
+      <button type="button" class="confirm-delete-button" (click)="deleteAccount()" [disabled]="!deletePassword().trim() || deletingAccount()">
+        @if (deletingAccount()) { Suppression... } @else { Supprimer le compte }
+      </button>
+    </div>
+  }
+</dialog>

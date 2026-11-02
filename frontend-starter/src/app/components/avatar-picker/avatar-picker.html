@@ -1,0 +1,21 @@
+<button type="button" class="avatar-picker-trigger" aria-haspopup="dialog" (click)="open()">
+  <img [src]="'/avatars/' + value + '.svg'" alt="" aria-hidden="true" />
+  <span>{{ buttonLabel }}</span>
+</button>
+
+<dialog #avatarDialog class="avatar-picker-dialog" aria-labelledby="avatar-picker-title">
+  <h2 id="avatar-picker-title">{{ buttonLabel }}</h2>
+  <p>Choisis un avatar parmi les propositions.</p>
+  <div class="avatar-options">
+    @for (avatar of avatars; track avatar.id) {
+      <button type="button" class="avatar-option" [class.selected-avatar]="value === avatar.id"
+        [attr.aria-pressed]="value === avatar.id" (click)="choose(avatar.id)">
+        <img [src]="'/avatars/' + avatar.id + '.svg'" alt="" aria-hidden="true" />
+        <span>{{ avatar.name }}</span>
+      </button>
+    }
+  </div>
+  <div class="avatar-picker-actions">
+    <button type="button" class="avatar-picker-cancel" (click)="close()">Annuler</button>
+  </div>
+</dialog>

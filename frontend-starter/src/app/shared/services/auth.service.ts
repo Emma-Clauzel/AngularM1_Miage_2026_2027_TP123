@@ -2,6 +2,8 @@ import { inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { tap } from 'rxjs';
 import { AuthResponse } from '../models/auth-response.model';
+import { ProfileAvatar } from '../models/profile-avatar.model';
+import { PublicAccount } from '../models/public-account.model';
 import { User } from '../models/user.model';
 
 /** Handles authentication and the current user's profile. */
@@ -12,16 +14,33 @@ export class AuthService {
   readonly currentUser = signal<User | null>(null);
   readonly token = signal<string | null>(localStorage.getItem('gpc_token'));
 
+  /** Reloads the signed-in user's profile from the token saved in this browser. */
+  restoreSession(): void {
+    if (!this.token() || this.currentUser()) return;
+
+    this.profile().subscribe({
+      error: () => {
+        // Keep the saved token if the API is temporarily unavailable.
+      },
+    });
+  }
+
   login(email: string, password: string) {
     return this.http
       .post<AuthResponse>('/api/auth/login', { email, password })
       .pipe(tap((response) => this.storeAuthentication(response)));
   }
 
-  register(name: string, email: string, password: string) {
-    return this.http
-      .post<AuthResponse>('/api/auth/register', { name, email, password })
-      .pipe(tap((response) => this.storeAuthentication(response)));
+  publicAccounts() {
+    return this.http.get<PublicAccount[]>('/api/auth/accounts');
+  }
+
+  deletePublicAccount(id: string, password: string) {
+    return this.http.delete<void>(`/api/auth/accounts/${encodeURIComponent(id)}`, { body: { password } });
+  }
+
+  register(name: string, email: string, password: string, avatar: ProfileAvatar) {
+    return this.http.post<AuthResponse>('/api/auth/register', { name, email, password, avatar });
   }
 
   profile() {
@@ -30,9 +49,9 @@ export class AuthService {
       .pipe(tap((user) => this.currentUser.set(user)));
   }
 
-  update(name: string) {
+  update(name: string, avatar?: ProfileAvatar) {
     return this.http
-      .put<User>('/api/users/me', { name })
+      .put<User>('/api/users/me', { name, ...(avatar ? { avatar } : {}) })
       .pipe(tap((user) => this.currentUser.set(user)));
   }
 

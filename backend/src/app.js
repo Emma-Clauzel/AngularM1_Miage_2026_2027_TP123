@@ -8,7 +8,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import mongoose from "mongoose";
 import { parseFile } from "music-metadata";
-import { User } from "./models/User.js";
+import { PROFILE_AVATARS, User } from "./models/User.js";
 import { Track } from "./models/Track.js";
 import { TAG_COLORS, TAG_ICONS, Tag } from "./models/Tag.js";
 import { downloadCover, findCoverSuggestions, saveCoverBytes } from "./cover-service.js";
@@ -19,6 +19,23 @@ const UPLOADS = path.resolve("data/uploads");
 const COVERS = path.resolve("data/covers");
 const tagIcons = new Set(TAG_ICONS);
 const tagColors = new Set(TAG_COLORS);
+
+function isLocalDevelopmentRequest(req) {
+  const remoteAddress = req.socket.remoteAddress || "";
+  const isLoopback = ["::1", "127.0.0.1", "::ffff:127.0.0.1"].includes(remoteAddress);
+  const host = (req.get("host") || "").toLowerCase();
+  const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
+  const origin = req.get("origin");
+  let isLocalOrigin = !origin;
+  if (origin) {
+    try {
+      isLocalOrigin = ["localhost", "127.0.0.1", "::1"].includes(new URL(origin).hostname);
+    } catch {
+      isLocalOrigin = false;
+    }
+  }
+  return process.env.NODE_ENV !== "production" && isLoopback && isLocalHost && isLocalOrigin;
+}
 
 function parseTagInput(body) {
   const name = typeof body?.name === "string" ? body.name.trim() : "";
@@ -254,7 +271,7 @@ export function createApp() {
    */
   app.post("/api/auth/register", async (req, res, next) => {
     try {
-      const { name, email, password } = req.body || {};
+      const { name, email, password, avatar } = req.body || {};
       console.log(`[auth] Tentative d'inscription pour ${email || "email absent"}`);
 
       if (!name || !email || !password || password.length < 8) {
@@ -262,6 +279,10 @@ export function createApp() {
         return res.status(400).json({
           message: "Nom, email et mot de passe de 8 caractères requis",
         });
+      }
+
+      if (avatar !== undefined && !PROFILE_AVATARS.includes(avatar)) {
+        return res.status(400).json({ message: "Photo de profil non valide" });
       }
 
       // Vérifie si l'email est déjà utilisé avant de créer un nouvel utilisateur.
@@ -272,11 +293,75 @@ export function createApp() {
 
       // Crée l'utilisateur et le stocke dans MongoDB. Le mot de passe est haché
       // par le hook pre('validate') défini dans le schéma Mongoose.
-      const user = await User.create({ name, email, password });
+      const user = await User.create({ name, email, password, ...(avatar ? { avatar } : {}) });
       console.log(`[auth] Utilisateur créé : ${user.id}`);
       res.status(201).json({ token: token(user), user: user.toPublic() });
     } catch (error) {
       console.error("[auth] Erreur pendant l'inscription", error);
+      next(error);
+    }
+  });
+
+  /** Publie uniquement le nom et l'avatar des comptes créés, pour la page de connexion. */
+  app.get("/api/auth/accounts", async (req, res, next) => {
+    try {
+      const accounts = await User.find({})
+        .select("name email avatar")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      res.json(accounts.map((account) => ({
+        id: String(account._id),
+        name: account.name,
+        email: account.email,
+        avatar: account.avatar ?? "cat",
+        canDeleteWithoutPassword: isLocalDevelopmentRequest(req),
+        deletable: account.email !== "demo@example.com",
+      })));
+    } catch (error) {
+      console.error("[auth] Impossible de charger les comptes publics", error);
+      next(error);
+    }
+  });
+
+  /** Supprime un compte après vérification de son mot de passe, ainsi que ses données. */
+  app.delete("/api/auth/accounts/:id", async (req, res, next) => {
+    try {
+      if (!mongoose.isValidObjectId(req.params.id)) {
+        return res.status(404).json({ message: "Compte introuvable" });
+      }
+
+      const user = await User.findById(req.params.id).select("+passwordHash");
+      if (!user) {
+        return res.status(401).json({ message: "Mot de passe incorrect" });
+      }
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      if (password && !(await user.verifyPassword(password))) {
+        return res.status(401).json({ message: "Mot de passe incorrect" });
+      }
+      if (!password && !isLocalDevelopmentRequest(req)) {
+        return res.status(401).json({ message: "Mot de passe requis pour supprimer ce compte" });
+      }
+      if (user.email === "demo@example.com") {
+        return res.status(403).json({ message: "Le compte de démonstration ne peut pas être supprimé ici" });
+      }
+
+      const tracks = await Track.find({ ownerId: user._id }).select("+storedName cover").lean();
+      await Track.deleteMany({ ownerId: user._id });
+      await Tag.deleteMany({ ownerId: user._id });
+      await User.deleteOne({ _id: user._id });
+
+      const files = tracks.flatMap((track) => [
+        track.storedName ? path.join(UPLOADS, track.storedName) : null,
+        track.cover?.storedName ? path.join(COVERS, track.cover.storedName) : null,
+      ]).filter(Boolean);
+      await Promise.all(files.map((file) => fsPromises.unlink(file).catch((error) => {
+        if (error.code !== "ENOENT") console.warn("[auth] Fichier du compte non supprimé", error.message);
+      })));
+
+      res.status(204).end();
+    } catch (error) {
+      console.error("[auth] Erreur pendant la suppression du compte", error);
       next(error);
     }
   });
@@ -336,14 +421,22 @@ export function createApp() {
     }
   });
 
-  /** Modifie uniquement le nom de l'utilisateur connecté. */
+  /** Met à jour le nom et/ou l'avatar du profil. */
   app.put("/api/users/me", auth, async (req, res, next) => {
     try {
-      const user = await User.findByIdAndUpdate(
-        req.auth.sub,
-        { $set: { name: req.body?.name } },
-        { new: true, runValidators: true },
-      );
+      const changes = {};
+      if (typeof req.body?.name === "string") changes.name = req.body.name;
+      if (req.body?.avatar !== undefined) {
+        if (!PROFILE_AVATARS.includes(req.body.avatar)) {
+          return res.status(400).json({ message: "Photo de profil non valide" });
+        }
+        changes.avatar = req.body.avatar;
+      }
+      if (!Object.keys(changes).length) {
+        return res.status(400).json({ message: "Aucune modification à enregistrer" });
+      }
+
+      const user = await User.findByIdAndUpdate(req.auth.sub, { $set: changes }, { new: true, runValidators: true });
 
       if (!user) {
         console.warn(`[user] Mise à jour impossible : ${req.auth.sub}`);
@@ -477,6 +570,7 @@ export function createApp() {
       const publicItems = items.map(({ _id, ownerId, cover, tags = [], __v, ...track }) => ({
         ...track,
         id: String(_id),
+        isFavorite: Boolean(track.isFavorite),
         tags: tags.filter(Boolean).map((tag) => ({ id: String(tag._id), name: tag.name, icon: tag.icon, color: tag.color })),
         cover: cover?.storedName ? {
           mimeType: cover.mimeType,
@@ -499,6 +593,52 @@ export function createApp() {
       });
     } catch (error) {
       console.error("[tracks] Erreur de pagination", error);
+      next(error);
+    }
+  });
+
+  /** Met à jour le titre, l'artiste et l'album d'une piste appartenant au compte connecté. */
+  app.put("/api/tracks/:id", auth, async (req, res, next) => {
+    try {
+      const { title, artist, album } = req.body ?? {};
+      if (typeof title !== "string" || !title.trim()) {
+        return res.status(400).json({ message: "Le titre du morceau est obligatoire." });
+      }
+      if (title.trim().length > 200) {
+        return res.status(400).json({ message: "Le titre ne peut pas dépasser 200 caractères." });
+      }
+      if (typeof artist !== "string" || typeof album !== "string") {
+        return res.status(400).json({ message: "L’artiste et l’album doivent être du texte." });
+      }
+      if (artist.trim().length > 200 || album.trim().length > 200) {
+        return res.status(400).json({ message: "L’artiste et l’album ne peuvent pas dépasser 200 caractères." });
+      }
+
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue." });
+      track.title = title.trim();
+      track.artist = artist.trim();
+      track.album = album.trim();
+      await track.save();
+      res.json(track.toPublic());
+    } catch (error) {
+      console.error("[tracks] Modification des informations impossible", error);
+      next(error);
+    }
+  });
+
+  app.patch("/api/tracks/:id/favorite", auth, async (req, res, next) => {
+    try {
+      if (typeof req.body?.isFavorite !== "boolean") {
+        return res.status(400).json({ message: "L’état favori doit être un booléen." });
+      }
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue." });
+      track.isFavorite = req.body.isFavorite;
+      await track.save();
+      res.json(track.toPublic());
+    } catch (error) {
+      console.error("[tracks] Modification du favori impossible", error);
       next(error);
     }
   });
@@ -537,6 +677,7 @@ export function createApp() {
           return res.status(400).json({ message: "Le nom de l’artiste ne peut pas dépasser 200 caractères." });
         }
         let audioMetadata = {};
+        const ignoreEmbeddedCover = req.body?.ignoreEmbeddedCover === "true";
         try {
           const parsed = await parseFile(req.file.path, { skipCovers: false });
           audioMetadata = {
@@ -545,7 +686,7 @@ export function createApp() {
             album: String(parsed.common.album ?? "").slice(0, 200),
             releaseYear: parsed.common.year ? String(parsed.common.year).slice(0, 10) : "",
           };
-          const picture = parsed.common.picture?.find((item) => item.type === "Cover (front)")
+          const picture = ignoreEmbeddedCover ? null : parsed.common.picture?.find((item) => item.type === "Cover (front)")
             ?? parsed.common.picture?.[0];
           if (picture?.data) {
             try {
@@ -673,10 +814,29 @@ export function createApp() {
     try {
       const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
       if (!track?.cover?.storedName) return res.status(404).json({ message: "Pochette inconnue" });
-      res.type(track.cover.mimeType).set({ "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" });
+      res.type(track.cover.mimeType).set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.sendFile(path.join(COVERS, track.cover.storedName), (error) => { if (error && !res.headersSent) next(error); });
     } catch (error) {
       console.error("[cover] Lecture de pochette impossible", error);
+      next(error);
+    }
+  });
+
+  app.delete("/api/tracks/:id/cover", auth, async (req, res, next) => {
+    try {
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue" });
+      const oldCoverName = track.cover?.storedName;
+      track.cover = { storedName: "", mimeType: "", source: "", sourceUrl: "", rightsConfirmed: false };
+      await track.save();
+      if (oldCoverName) {
+        await fsPromises.unlink(path.join(COVERS, oldCoverName)).catch((error) => {
+          if (error.code !== "ENOENT") console.warn("[cover] Ancienne pochette non supprimée", error.message);
+        });
+      }
+      res.status(204).end();
+    } catch (error) {
+      console.error("[cover] Suppression de pochette impossible", error);
       next(error);
     }
   });

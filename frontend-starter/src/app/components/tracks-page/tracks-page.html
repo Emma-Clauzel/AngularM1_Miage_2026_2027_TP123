@@ -15,7 +15,16 @@
       }
       @if (metadataLoading()) { <p role="status">Lecture des tags ID3…</p> }
       @if (embeddedCoverPreview()) {
-        <figure class="import-cover-preview"><img [src]="embeddedCoverPreview()" alt="Pochette intégrée au fichier audio" /><figcaption>Pochette détectée dans les tags du fichier</figcaption></figure>
+        <figure class="import-cover-preview">
+          <div class="import-cover-image-wrap">
+            <img [src]="embeddedCoverPreview()" alt="Pochette intégrée au fichier audio" />
+            <button class="remove-import-cover" type="button" (click)="removeEmbeddedCover()" aria-label="Ne pas utiliser cette pochette" title="Ne pas utiliser cette pochette">&times;</button>
+          </div>
+          <figcaption>Pochette détectée dans les tags du fichier</figcaption>
+        </figure>
+      }
+      @if (embeddedCoverDismissed()) {
+        <p class="file-name" role="status">La pochette détectée sera ignorée.</p>
       }
       <label for="track-title">Titre</label>
       <input id="track-title" maxlength="200" [formControl]="title" autocomplete="off" placeholder="Prérempli depuis les tags ID3 ou le nom du fichier" />
@@ -36,7 +45,7 @@
       @if (uploadSuccess()) {
         <p class="success" role="status">{{ uploadSuccess() }}</p>
       }
-      <button type="button" (click)="upload()" [disabled]="!file || uploadLoading() || metadataLoading() || !!uploadError() || (!!uploadCoverFile && !uploadCoverRightsConfirmed())">
+      <button class="send_button" type="button" (click)="upload()" [disabled]="!file || uploadLoading() || metadataLoading() || !!uploadError() || (!!uploadCoverFile && !uploadCoverRightsConfirmed())">
         @if (uploadLoading()) { Envoi en cours… } @else { Envoyer }
       </button>
       @if (uploadLoading()) {
@@ -80,6 +89,13 @@
                 }
               </select>
             </div>
+            <div>
+              <label for="track-favorite-filter">Favoris</label>
+              <select id="track-favorite-filter" [value]="favoriteFilter()" (change)="setFavoriteFilter($event)">
+                <option value="all">Toutes les pistes</option>
+                <option value="favorites">Favori</option>
+              </select>
+            </div>
           </div>
           <p class="search-count" aria-live="polite">{{ filteredTracks().length }} résultat(s) dans la bibliothèque</p>
         </div>
@@ -95,6 +111,9 @@
         <div class="track-list">
           @for (track of filteredTracks(); track track.id) {
             <article class="track-card">
+              <button class="favorite-button" type="button" (click)="toggleFavorite(track)" [disabled]="favoriteSavingIds().has(track.id)" [class.is-favorite]="track.isFavorite" [attr.aria-pressed]="track.isFavorite" [attr.aria-label]="track.isFavorite ? 'Retirer ' + track.title + ' des favoris' : 'Ajouter ' + track.title + ' aux favoris'" [title]="track.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 2.8 2.85 5.78 6.38.93-4.62 4.5 1.09 6.36L12 17.36l-5.7 3 1.09-6.35-4.62-4.5 6.38-.93L12 2.8Z" /></svg>
+              </button>
               <div class="track-details">
                 <div class="track-top-row">
                   <button class="cover-trigger" type="button" (click)="openCoverManager(track)" [attr.aria-label]="'Afficher ou modifier la pochette de ' + track.title" [title]="'Modifier la pochette de ' + track.title">
@@ -128,6 +147,7 @@
                 <button type="button" (click)="play(track)" [disabled]="player.loading()" [attr.aria-label]="'Lire ' + track.title">
                   @if (player.loading()) { Chargement… } @else { Lire }
                 </button>
+                <button type="button" (click)="openTrackEditor(track)" [attr.aria-label]="'Modifier les informations de ' + track.title">Modifier</button>
                 <button class="delete-button" type="button" (click)="requestDelete(track)" [disabled]="!!deletingTrackId()" [attr.aria-label]="'Supprimer ' + track.title" [title]="'Supprimer ' + track.title">
                   @if (deletingTrackId() === track.id) { … } @else { 🗑 }
                 </button>
@@ -150,13 +170,14 @@
               Je confirme que j’ai le droit d’utiliser cette image.
             </label>
             @if (coverError()) {
-              <p [class.error]="!coverError().startsWith('Pochette enregistrée.')" [class.success]="coverError().startsWith('Pochette enregistrée.')" role="status">{{ coverError() }}</p>
+              <p [class.error]="!coverError().startsWith('Pochette enregistrée.') && !coverError().startsWith('Pochette supprimée.')" [class.success]="coverError().startsWith('Pochette enregistrée.') || coverError().startsWith('Pochette supprimée.')" role="status">{{ coverError() }}</p>
             }
             @if (coverTrack.cover) {
               <p>Couverture actuelle — source : {{ coverTrack.cover.source }}.</p>
               @if (!coverTrack.cover.rightsConfirmed) {
                 <p class="rights-note">Cette image vient des tags ID3 du fichier.</p>
               }
+              <button type="button" (click)="removeCurrentCover()" [disabled]="coverSaving()">Retirer cette pochette</button>
             }
             <div class="cover-search-fields">
               <label for="cover-search-title">Titre</label>
@@ -269,6 +290,28 @@
       </dialog>
     </article>
   </div>
+
+  <dialog #editTrackDialog class="delete-dialog edit-track-dialog" aria-labelledby="edit-track-dialog-title" (cancel)="closeTrackEditor()">
+    @if (trackPendingEdit(); as trackToEdit) {
+      <h2 id="edit-track-dialog-title">Modifier les informations</h2>
+      <p>{{ trackToEdit.title }}</p>
+      <form class="edit-track-form" (ngSubmit)="saveTrackMetadata()">
+        <label for="edit-track-title">Titre</label>
+        <input id="edit-track-title" type="text" maxlength="200" required [value]="editTrackTitle()" (input)="updateTrackEdit('title', $event)" />
+        <label for="edit-track-artist">Artiste</label>
+        <input id="edit-track-artist" type="text" maxlength="200" [value]="editTrackArtist()" (input)="updateTrackEdit('artist', $event)" />
+        <label for="edit-track-album">Album</label>
+        <input id="edit-track-album" type="text" maxlength="200" [value]="editTrackAlbum()" (input)="updateTrackEdit('album', $event)" />
+        @if (editTrackError()) { <p class="error" role="alert">{{ editTrackError() }}</p> }
+        <div class="dialog-actions">
+          <button type="button" class="cancel-button" (click)="closeTrackEditor()" [disabled]="editTrackSaving()">Annuler</button>
+          <button type="submit" [disabled]="editTrackSaving() || !editTrackTitle().trim()">
+            @if (editTrackSaving()) { Enregistrement… } @else { Enregistrer }
+          </button>
+        </div>
+      </form>
+    }
+  </dialog>
 
   <dialog #deleteDialog class="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description" (cancel)="trackPendingDeletion.set(null)">
     <h2 id="delete-dialog-title">Confirmer la suppression</h2>

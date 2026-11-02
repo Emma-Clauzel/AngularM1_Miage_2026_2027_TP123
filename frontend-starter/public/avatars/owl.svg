@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#e8e0f2"/>
+  <!-- Silhouette avec aigrettes caractéristiques du hibou -->
+  <path d="m29 43-8-22 30 14a47 47 0 0 1 26 0l30-14-8 22c11 12 16 27 12 43-5 21-22 34-47 34S22 107 17 86c-4-16 1-31 12-43Z" fill="#755b89" stroke="#553d65" stroke-width="4" stroke-linejoin="round"/>
+  <path d="m26 30 19 11-16 10Zm76 0L83 41l16 10Z" fill="#d899ae"/>
+  <!-- Disque facial clair et grands yeux -->
+  <ellipse cx="45" cy="65" rx="23" ry="27" fill="#f7efdf"/>
+  <ellipse cx="83" cy="65" rx="23" ry="27" fill="#f7efdf"/>
+  <circle cx="48" cy="64" r="12" fill="#d8b76b"/><circle cx="80" cy="64" r="12" fill="#d8b76b"/>
+  <circle cx="49" cy="64" r="5.5" fill="#38202c"/><circle cx="79" cy="64" r="5.5" fill="#38202c"/>
+  <circle cx="50.5" cy="62" r="1.8" fill="#fffaf0"/><circle cx="80.5" cy="62" r="1.8" fill="#fffaf0"/>
+  <path d="m58 82 6-6 6 6-6 9Z" fill="#e9905c" stroke="#bd704b" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Plumes du poitrail -->
+  <path d="M43 98c5-5 10-5 15 0m-7 8c5-5 10-5 15 0m-7-8c5-5 10-5 15 0m-7 8c5-5 10-5 15 0" fill="none" stroke="#c5a9c9" stroke-width="3" stroke-linecap="round"/>
+</svg>
