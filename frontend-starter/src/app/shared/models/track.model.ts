@@ -9,7 +9,9 @@ export interface Track {
   artist?: string;
   album?: string;
   releaseYear?: string;
+  durationSeconds?: number;
   isFavorite?: boolean;
+  practiceLoops?: PracticeLoop[];
   cover: {
     mimeType: string;
     source: 'embedded' | 'upload' | 'cover-art-archive';
@@ -17,6 +19,13 @@ export interface Track {
     rightsConfirmed: boolean;
   } | null;
   tags?: { id: string; name: string; icon: string; color: string }[];
+}
+
+export interface PracticeLoop {
+  id: string;
+  name: string;
+  start: number;
+  end: number;
 }
 
 export interface CoverSuggestion {

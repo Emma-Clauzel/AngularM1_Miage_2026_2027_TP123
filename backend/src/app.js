@@ -273,27 +273,39 @@ export function createApp() {
     try {
       const { name, email, password, avatar } = req.body || {};
       console.log(`[auth] Tentative d'inscription pour ${email || "email absent"}`);
+      const normalizedName = typeof name === "string" ? name.trim() : "";
+      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      const normalizedPassword = typeof password === "string" ? password : "";
 
-      if (!name || !email || !password || password.length < 8) {
-        console.warn("[auth] Inscription refusée : données invalides ou incomplètes");
-        return res.status(400).json({
-          message: "Nom, email et mot de passe de 8 caractères requis",
-        });
+      if (!normalizedName) {
+        return res.status(400).json({ message: "Le nom doit contenir au moins 1 caractère." });
+      }
+      if (normalizedEmail.length < 8 || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+        return res.status(400).json({ message: "L’email doit contenir au moins 8 caractères et être valide." });
+      }
+      if (normalizedPassword.length < 8) {
+        return res.status(400).json({ message: "Le mot de passe doit contenir au moins 8 caractères." });
       }
 
       if (avatar !== undefined && !PROFILE_AVATARS.includes(avatar)) {
         return res.status(400).json({ message: "Photo de profil non valide" });
       }
 
+      const nameAlreadyUsed = await User.findOne({ name: normalizedName })
+        .collation({ locale: "fr", strength: 2 });
+      if (nameAlreadyUsed) {
+        return res.status(409).json({ message: "Ce nom est déjà utilisé par un autre compte." });
+      }
+
       // Vérifie si l'email est déjà utilisé avant de créer un nouvel utilisateur.
-      if (await User.exists({ email: String(email).toLowerCase() })) {
+      if (await User.exists({ email: normalizedEmail })) {
         console.warn(`[auth] Email déjà utilisé : ${email}`);
         return res.status(409).json({ message: "Email déjà utilisé" });
       }
 
       // Crée l'utilisateur et le stocke dans MongoDB. Le mot de passe est haché
       // par le hook pre('validate') défini dans le schéma Mongoose.
-      const user = await User.create({ name, email, password, ...(avatar ? { avatar } : {}) });
+      const user = await User.create({ name: normalizedName, email: normalizedEmail, password: normalizedPassword, ...(avatar ? { avatar } : {}) });
       console.log(`[auth] Utilisateur créé : ${user.id}`);
       res.status(201).json({ token: token(user), user: user.toPublic() });
     } catch (error) {
@@ -425,7 +437,21 @@ export function createApp() {
   app.put("/api/users/me", auth, async (req, res, next) => {
     try {
       const changes = {};
-      if (typeof req.body?.name === "string") changes.name = req.body.name;
+      if (typeof req.body?.name === "string") {
+        const normalizedName = req.body.name.trim();
+        if (!normalizedName) {
+          return res.status(400).json({ message: "Le nom doit contenir au moins 1 caractère." });
+        }
+        const nameAlreadyUsed = await User.findOne({
+          name: normalizedName,
+          _id: { $ne: req.auth.sub },
+        }).collation({ locale: "fr", strength: 2 });
+        if (nameAlreadyUsed) {
+          return res.status(409).json({ message: "Ce nom est déjà utilisé par un autre compte." });
+        }
+        changes.name = normalizedName;
+        changes.nameKey = normalizedName.toLowerCase();
+      }
       if (req.body?.avatar !== undefined) {
         if (!PROFILE_AVATARS.includes(req.body.avatar)) {
           return res.status(400).json({ message: "Photo de profil non valide" });
@@ -571,6 +597,9 @@ export function createApp() {
         ...track,
         id: String(_id),
         isFavorite: Boolean(track.isFavorite),
+        practiceLoops: Array.isArray(track.practiceLoops) ? track.practiceLoops.map((loop) => ({
+          id: String(loop._id), name: loop.name, start: loop.start, end: loop.end,
+        })) : [],
         tags: tags.filter(Boolean).map((tag) => ({ id: String(tag._id), name: tag.name, icon: tag.icon, color: tag.color })),
         cover: cover?.storedName ? {
           mimeType: cover.mimeType,
@@ -623,6 +652,69 @@ export function createApp() {
       res.json(track.toPublic());
     } catch (error) {
       console.error("[tracks] Modification des informations impossible", error);
+      next(error);
+    }
+  });
+
+  /** Enregistre un passage d'entraînement sur une piste appartenant au compte connecté. */
+  app.post("/api/tracks/:id/practice-loops", auth, async (req, res, next) => {
+    try {
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      const start = req.body?.start;
+      const end = req.body?.end;
+      if (!name || name.length > 60) {
+        return res.status(400).json({ message: "Le nom du passage doit contenir de 1 à 60 caractères." });
+      }
+      if (typeof start !== "number" || typeof end !== "number" || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
+        return res.status(400).json({ message: "Les points A et B du passage ne sont pas valides." });
+      }
+
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue." });
+      if (Number.isFinite(track.durationSeconds) && end > track.durationSeconds) {
+        return res.status(400).json({ message: "Le point B dépasse la durée du morceau." });
+      }
+      track.practiceLoops.push({ name, start, end });
+      await track.save();
+      res.status(201).json({ practiceLoops: track.toPublic().practiceLoops });
+    } catch (error) {
+      console.error("[tracks] Enregistrement du passage impossible", error);
+      next(error);
+    }
+  });
+
+  /** Renomme un passage d'entraînement d'une piste appartenant au compte connecté. */
+  app.patch("/api/tracks/:id/practice-loops/:loopId", auth, async (req, res, next) => {
+    try {
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      if (!name || name.length > 60) {
+        return res.status(400).json({ message: "Le nom du passage doit contenir de 1 à 60 caractères." });
+      }
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue." });
+      const practiceLoop = track.practiceLoops.id(req.params.loopId);
+      if (!practiceLoop) return res.status(404).json({ message: "Passage d’entraînement introuvable." });
+      practiceLoop.name = name;
+      await track.save();
+      res.json({ practiceLoops: track.toPublic().practiceLoops });
+    } catch (error) {
+      console.error("[tracks] Renommage du passage impossible", error);
+      next(error);
+    }
+  });
+
+  /** Supprime un passage d'entraînement appartenant à une piste du compte connecté. */
+  app.delete("/api/tracks/:id/practice-loops/:loopId", auth, async (req, res, next) => {
+    try {
+      const track = await Track.findOne({ _id: req.params.id, ownerId: req.auth.sub });
+      if (!track) return res.status(404).json({ message: "Piste inconnue." });
+      const practiceLoop = track.practiceLoops.id(req.params.loopId);
+      if (!practiceLoop) return res.status(404).json({ message: "Passage d’entraînement introuvable." });
+      practiceLoop.deleteOne();
+      await track.save();
+      res.json({ practiceLoops: track.toPublic().practiceLoops });
+    } catch (error) {
+      console.error("[tracks] Suppression du passage impossible", error);
       next(error);
     }
   });
@@ -685,6 +777,7 @@ export function createApp() {
             artist: String(parsed.common.artist ?? "").trim().slice(0, 200) || fromFilename.artist,
             album: String(parsed.common.album ?? "").slice(0, 200),
             releaseYear: parsed.common.year ? String(parsed.common.year).slice(0, 10) : "",
+            durationSeconds: Number.isFinite(parsed.format?.duration) ? parsed.format.duration : undefined,
           };
           const picture = ignoreEmbeddedCover ? null : parsed.common.picture?.find((item) => item.type === "Cover (front)")
             ?? parsed.common.picture?.[0];
@@ -711,6 +804,7 @@ export function createApp() {
           artist: (typeof req.body.artist === "string" ? req.body.artist.trim() : "") || audioMetadata.artist || fromFilename.artist,
           album: audioMetadata.album,
           releaseYear: audioMetadata.releaseYear,
+          ...(Number.isFinite(audioMetadata.durationSeconds) ? { durationSeconds: audioMetadata.durationSeconds } : {}),
           ...(embeddedCoverName ? { cover: { storedName: embeddedCoverName, mimeType: embeddedCoverMime, source: "embedded" } } : {}),
         });
 
@@ -922,6 +1016,12 @@ export function createApp() {
     }
     if (error?.name === "CastError") {
       return res.status(404).json({ message: "Ressource inconnue" });
+    }
+    if (error?.code === 11000 && error?.keyPattern?.nameKey) {
+      return res.status(409).json({ message: "Ce nom est déjà utilisé par un autre compte." });
+    }
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: "Cette valeur est déjà utilisée par un autre compte." });
     }
 
     next(error);

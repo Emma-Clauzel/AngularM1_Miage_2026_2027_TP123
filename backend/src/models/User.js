@@ -9,7 +9,9 @@ export const PROFILE_AVATARS = ["cat", "fox", "panda", "rabbit", "bear", "raccoo
  */
 const schema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true, minlength: 2 },
+    name: { type: String, required: true, trim: true, minlength: 1 },
+    // Clé normalisée pour garantir l'unicité même si deux noms ne diffèrent que par la casse.
+    nameKey: { type: String, select: false },
     email: {
       type: String,
       required: true,
@@ -22,6 +24,11 @@ const schema = new mongoose.Schema(
     passwordHash: { type: String, required: true, select: false },
   },
   { timestamps: true },
+);
+
+schema.index(
+  { nameKey: 1 },
+  { unique: true, partialFilterExpression: { nameKey: { $type: "string" } } },
 );
 
 /**
@@ -39,6 +46,7 @@ schema.virtual("password").set(function (value) {
  * original ne doit jamais être écrit dans la base ni dans les logs.
  */
 schema.pre("validate", async function () {
+  if (typeof this.name === "string") this.nameKey = this.name.trim().toLowerCase();
   if (this.isNew && this._plainPassword) {
     console.debug(`[user-model] Hachage du mot de passe pour ${this.email}`);
     this.passwordHash = await bcrypt.hash(this._plainPassword, 10);

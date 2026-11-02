@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Page } from '../models/page.model';
-import { CoverSuggestion, Track } from '../models/track.model';
+import { CoverSuggestion, PracticeLoop, Track } from '../models/track.model';
 import { Tag, TagInput } from '../models/tag.model';
 import { forkJoin, map, of, switchMap } from 'rxjs';
 
@@ -50,6 +50,18 @@ export class TrackService {
 
   setFavorite(id: string, isFavorite: boolean) {
     return this.http.patch<Track>(`/api/tracks/${id}/favorite`, { isFavorite });
+  }
+
+  savePracticeLoop(id: string, loop: { name: string; start: number; end: number }) {
+    return this.http.post<{ practiceLoops: PracticeLoop[] }>(`/api/tracks/${id}/practice-loops`, loop);
+  }
+
+  renamePracticeLoop(id: string, loopId: string, name: string) {
+    return this.http.patch<{ practiceLoops: PracticeLoop[] }>(`/api/tracks/${id}/practice-loops/${loopId}`, { name });
+  }
+
+  deletePracticeLoop(id: string, loopId: string) {
+    return this.http.delete<{ practiceLoops: PracticeLoop[] }>(`/api/tracks/${id}/practice-loops/${loopId}`);
   }
 
   inspectAudio(file: File) {

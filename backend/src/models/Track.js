@@ -21,7 +21,12 @@ const schema = new mongoose.Schema(
     artist: { type: String, trim: true, default: "", maxlength: 200 },
     album: { type: String, trim: true, default: "", maxlength: 200 },
     releaseYear: { type: String, trim: true, default: "", maxlength: 10 },
+    durationSeconds: { type: Number, min: 0 },
     isFavorite: { type: Boolean, default: false },
+    practiceLoops: {
+      type: [{ name: { type: String, required: true, trim: true, maxlength: 60 }, start: { type: Number, required: true, min: 0 }, end: { type: Number, required: true, min: 0 } }],
+      default: [],
+    },
     tags: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }], default: [] },
     cover: {
       storedName: { type: String, default: "" },
@@ -55,7 +60,11 @@ schema.methods.toPublic = function () {
     artist: this.artist,
     album: this.album,
     releaseYear: this.releaseYear,
+    durationSeconds: this.durationSeconds,
     isFavorite: Boolean(this.isFavorite),
+    practiceLoops: Array.isArray(this.practiceLoops) ? this.practiceLoops.map((loop) => ({
+      id: String(loop._id), name: loop.name, start: loop.start, end: loop.end,
+    })) : [],
     tags: Array.isArray(this.tags) ? this.tags
       .filter((tag) => tag && typeof tag === "object" && tag.name)
       .map((tag) => ({ id: String(tag._id), name: tag.name, icon: tag.icon, color: tag.color })) : [],

@@ -16,9 +16,9 @@ export class RegisterPageComponent {
 
   readonly error = signal('');
   readonly form = new FormGroup({
-    name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-    email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email] }),
-    password: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    name: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.minLength(1), Validators.pattern(/\S/)] }),
+    email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email, Validators.minLength(8)] }),
+    password: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.minLength(8)] }),
     avatar: new FormControl<ProfileAvatar>('cat', { nonNullable: true }),
   });
 
@@ -28,8 +28,12 @@ export class RegisterPageComponent {
   }
 
   submit(): void {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
     const values = this.form.getRawValue();
-    this.auth.register(values.name, values.email, values.password, values.avatar).subscribe({
+    this.auth.register(values.name.trim(), values.email.trim(), values.password, values.avatar).subscribe({
       next: () => {
         console.debug('[RegisterPage] Inscription réussie');
         this.auth.logout();

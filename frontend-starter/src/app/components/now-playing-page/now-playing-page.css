@@ -1,31 +1,27 @@
 .music-scene { position: relative; isolation: isolate; display: grid; height: calc(100dvh - 10rem); min-height: 0; padding: 0; place-items: center; }
-.music-scene.training-active { height: calc(100dvh - 8rem); }
 .bass-orb { position: fixed; z-index: 0; top: 50%; left: 50%; width: min(78vmin, 720px); height: auto; overflow: visible; pointer-events: none; filter: drop-shadow(0 10px 22px rgb(110 41 72 / 22%)) blur(2px); transform-origin: center; transition: opacity 100ms linear; }
 .bass-orb > g:first-of-type { display: none; }
 .bass-spikes { transition: d 70ms linear; }
-.now-playing-page { position: relative; z-index: 1; max-width: 38rem; min-height: 92%; max-height: 105%; margin: 0 auto; padding: clamp(0.7rem, 1.5dvh, 1.3rem); overflow-y: auto; text-align: center; background: rgb(255 255 255 / var(--panel-alpha, 0.92)); backdrop-filter: blur(5px); }
-.now-playing-page.training-mode { display: flex; flex-direction: column; min-height: 104%; max-height: 105%; padding: 0.55rem 0.75rem; }
+.now-playing-layout { position: relative; z-index: 1; display: grid; width: min(100%, 38rem); height: 100%; min-height: 0; place-items: center; }
+.now-playing-layout.with-training-panel { width: min(100%, 64rem); grid-template-columns: minmax(0, 38rem) minmax(17rem, 22rem); align-items: center; justify-content: center; gap: clamp(1rem, 2vw, 2rem); }
+.now-playing-page { position: relative; z-index: 1; width: 100%; max-width: 38rem; min-height: 92%; max-height: 105%; margin: 0 auto; padding: clamp(0.7rem, 1.5dvh, 1.3rem); overflow-y: auto; text-align: center; background: rgb(255 255 255 / var(--panel-alpha, 0.92)); backdrop-filter: blur(5px); }
 .now-playing-header { display: flex; align-items: center; justify-content: space-between; gap: 0.9rem; margin-bottom: 0.5rem; }
 .now-playing-header > a, .training-mode-toggle { display: inline-flex; height: 2.5rem; min-width: 0; align-items: center; justify-content: center; padding: 0.45rem 0.6rem; font-size: 0.8rem; line-height: 1.2; white-space: nowrap; }
 .now-playing-header > a { flex: 0 1 auto; }
 .training-mode-toggle { flex: 0 1 auto; color: white; background: var(--rose); }
 .training-mode-toggle:hover:not(:disabled) { background: var(--rose-hover); }
-.now-playing-page h1 { padding-top: 1dvh; }
+.now-playing-page h1 { padding-top: 0.5dvh; }
 .large-cover { display: block; width: min(28dvh, 20rem, 100%); aspect-ratio: 1; margin: 1dvh auto; border-radius: 14px; object-fit: cover; box-shadow: 0 8px 26px #49323f24; }
-.cover-volume-row { display: flex; align-items: center; justify-content: center; gap: clamp(0.65rem, 5vw, 3rem); width: 100%; }
+.cover-volume-row { position: relative; display: flex; align-items: center; justify-content: center; gap: clamp(0.65rem, 5vw, 3rem); width: 100%; }
+.volume-feedback { position: absolute; z-index: 2; top: 0; left: 50%; padding: 0.4rem 0.75rem; transform: translate(-50%, -115%); border: 1px solid #e8abc2; border-radius: 999px; color: #fff; background: #a74870; box-shadow: 0 4px 14px rgb(73 50 63 / 22%); font-size: 0.85rem; font-weight: 700; white-space: nowrap; pointer-events: none; animation: volume-feedback-pop 1.1s ease both; }
+@keyframes volume-feedback-pop { 0% { opacity: 0; transform: translate(-50%, -95%) scale(0.9); } 12%, 72% { opacity: 1; transform: translate(-50%, -115%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -125%) scale(0.96); } }
 .cover-volume-row .large-cover { flex: 0 1 auto; margin: 1dvh 0; }
-.now-playing-page.training-mode .cover-volume-row { gap: 1.9rem; }
 .volume-button { flex: 0 0 auto; }
 .now-playing-page .volume-button svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.now-playing-page:not(.training-mode) .volume-button svg { transform: scale(1.4); }
-.now-playing-page.training-mode .large-cover { width: min(28dvh, 19rem, 100%); margin: 0.6dvh auto; }
-.now-playing-page.training-mode .cover-volume-row .large-cover { margin: 0.6dvh 0; }
+.now-playing-page .volume-button svg { transform: scale(1.4); }
 .cover-placeholder { display: grid; place-items: center; color: #a74870; background-color: #f8e3ec; font-size: min(6rem, 8dvh); }
 .now-playing-page h2 { margin: 0.5dvh 0; }
 .now-playing-page > p { color: #775d6b; }
-.now-playing-page.training-mode h1 { margin: 0.25rem 0; padding-top: 0; font-size: 1.4rem; }
-.now-playing-page.training-mode h2 { margin: 0.2rem 0; font-size: 1.12rem; }
-.now-playing-page.training-mode > p:not(.queue-note) { margin: 0.15rem 0; font-size: 0.88rem; }
 .playback-controls { display: flex; justify-content: center; gap: 1dvh; margin: 1.5dvh 0 1dvh; }
 .transport-button { display: grid; width: clamp(2.5rem, 6dvh, 3.5rem); height: clamp(2.5rem, 6dvh, 3.5rem); padding: 2%; place-items: center; border: 1px solid #a74870; border-radius: 50%; color: #6e2948; background: #fff7fa; }
 .transport-button.is-playing { background: #f8e3ec; }
@@ -35,10 +31,6 @@
 .transport-button:focus-visible { outline: 3px solid #a74870; outline-offset: 3px; }
 .playback-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 1dvh; margin: 0.5dvh 0 1dvh; }
 .player-control-row { display: grid; justify-items: center; }
-.training-mode .player-control-row { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; gap: 0.65rem; }
-.training-mode .playback-controls, .training-mode .playback-options { flex-wrap: nowrap; gap: 0.55rem; margin: 0.65dvh 0; }
-.training-mode .playback-controls, .training-mode .playback-options { gap: 0.45rem; margin: 0.4dvh 0; }
-.training-mode .transport-button, .training-mode .playback-options .option-button { width: 2.7rem; height: 2.7rem; padding: 0.1rem; }
 .playback-options .option-button { display: grid; width: clamp(2.5rem, 6dvh, 3.5rem); height: clamp(2.5rem, 6dvh, 3.5rem); min-height: 0; padding: 2%; place-items: center; border: 1px solid #a74870; border-radius: 50%; color: #6e2948; background: #fff7fa; cursor: pointer; }
 .playback-options button.active-option { color: #fff; background: #a74870; }
 .playback-options button.active-option:hover { background: #893b5e; }
@@ -50,41 +42,46 @@
 .shuffle-icon .shuffle-arrowhead { fill: currentColor; stroke: none; }
 .timeline { display: grid; grid-template-columns: 3rem 1fr 3rem; align-items: center; gap: 0.5rem; font-variant-numeric: tabular-nums; }
 .timeline input { width: 100%; padding: 0; accent-color: #a74870; }
-.training-mode .timeline { grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem; gap: 0.25rem; font-size: 0.78rem; }
 .training-panel { display: grid; gap: 0.55rem; margin-top: 0.75rem; padding: 0.85rem; text-align: left; border: 1px solid #e8bfd0; border-radius: 12px; background: rgb(255 247 250 / 82%); }
-.training-mode .training-panel { gap: 0.45rem; margin-top: 5%; padding: 0.65rem; }
+.training-side-panel { width: 100%; max-height: 90%; margin: 0; overflow-y: auto; }
 .training-panel h3 { margin: 0; text-align: center; color: #6e2948; }
-.training-mode .training-panel h3 { font-size: 1.02rem; }
 .training-panel > label { margin-bottom: -0.35rem; font-size: 0.9rem; font-weight: 600; }
-.training-mode .training-panel > label { margin: 0; font-size: 0.8rem; }
 .training-panel select { width: 100%; padding: 0.55rem 0.7rem; color: #49323f; border: 1px solid #dfb8c8; border-radius: 8px; background: white; }
-.training-mode .training-panel select { padding: 0.4rem 0.5rem; }
 .speed-control { display: grid; grid-template-columns: 2.55rem minmax(5.5rem, 7.5rem) 2.55rem; align-items: center; justify-content: center; gap: 0.55rem; }
-.training-mode .speed-control { grid-template-columns: 2.15rem minmax(5rem, 6.5rem) 2.15rem; gap: 0.4rem; }
 .training-panel .speed-control select { min-width: 0; }
 .speed-step-button { display: grid; width: 2.55rem; height: 2.55rem; min-height: 0; padding: 0.55rem; place-items: center; border: 1px solid #a74870; border-radius: 50%; color: #6e2948; background: #fff7fa; }
-.training-mode .speed-step-button { width: 2.15rem; height: 2.15rem; padding: 0.4rem; }
 .speed-step-button:hover:not(:disabled) { background: #f3d5e1; }
 .speed-step-button svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .loop-control-row { display: grid; grid-template-columns: 3rem minmax(0, 1fr) 3rem; align-items: center; gap: 0.45rem; }
-.training-mode .loop-control-row { grid-template-columns: 2.55rem minmax(0, 1fr) 2.55rem; gap: 0.35rem; }
 .loop-marker { display: grid; justify-items: center; gap: 0.25rem; min-width: 0; }
 .loop-marker span { color: #775d6b; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
-.training-mode .loop-marker span { font-size: 0.68rem; }
 .marker-button { display: grid; width: 2.55rem; height: 2.55rem; min-height: 0; padding: 0; place-items: center; border: 1px solid #a74870; border-radius: 50%; color: #6e2948; background: #fff7fa; font-weight: 700; }
-.training-mode .marker-button { width: 2.15rem; height: 2.15rem; }
 .marker-button:hover:not(:disabled) { background: #f3d5e1; }
 .loop-control-row .ab-loop-button { min-width: 0; min-height: 2.5rem; padding: 0.45rem 0.55rem; }
-.training-mode .loop-control-row .ab-loop-button { min-height: 2.15rem; padding: 0.35rem 0.45rem; font-size: 0.76rem; }
+.practice-loop-editor, .saved-practice-loops { display: grid; gap: 0.3rem; min-width: 0; }
+.practice-loop-editor > label, .saved-practice-loops h4 { margin: 0; font-size: 0.78rem; font-weight: 650; }
+.practice-loop-save-row, .saved-practice-loop-actions { display: flex; align-items: center; gap: 0.4rem; }
+.practice-loop-save-row input { flex: 1 1 auto; min-width: 0; padding: 0.4rem 0.55rem; border: 1px solid #dfb8c8; border-radius: 8px; color: #49323f; background: #fff; }
+.practice-loop-action, .practice-loop-delete { min-height: 2rem; padding: 0.3rem 0.55rem; border: 1px solid #a74870; border-radius: 8px; color: #6e2948; background: #fff7fa; font-size: 0.76rem; white-space: nowrap; }
+.practice-loop-action:hover:not(:disabled), .practice-loop-delete:hover:not(:disabled) { background: #f3d5e1; }
+.practice-loop-action:disabled, .practice-loop-delete:disabled { opacity: 0.5; }
+.saved-practice-loops ul { display: grid; gap: 0.3rem; max-height: 7.5rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.saved-practice-loops li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-width: 0; padding: 0.35rem 0.45rem; border: 1px solid #e8bfd0; border-radius: 8px; }
+.saved-practice-loop-details { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.practice-loop-rename-input { width: 100%; min-width: 0; padding: 0.3rem; border: 1px solid #dfb8c8; border-radius: 6px; color: #49323f; background: #fff; }
+.saved-practice-loop-actions { flex-wrap: wrap; justify-content: flex-end; }
+.saved-practice-loop-details small, .no-practice-loops { color: #775d6b; font-size: 0.72rem; }
+.no-practice-loops { margin: 0; }
+.practice-loop-delete { width: 2rem; padding: 0; font-size: 1.1rem; }
+.practice-loop-error { margin: 0; color: #a33; font-size: 0.78rem; }
 .loop-control-row .ab-loop-button { color: #704052; border: 1px solid #a74870; background: #fff7fa; font-size: 0.82rem; line-height: 1.15; }
 .loop-control-row .ab-loop-button.active-option { color: white; background: #a74870; }
 .loop-control-row .ab-loop-button:disabled { opacity: 0.5; }
 .training-help { margin: 0; color: #775d6b; font-size: 0.82rem; }
-.training-mode .training-help { font-size: 0.76rem; line-height: 1.25; }
-.training-mode .queue-note { display: none; }
-.queue-note { margin-top: 1dvh; font-size: 0.85rem; }
+.queue-note { margin-top: 0.1dvh; font-size: 0.85rem; }
 .error { color: #a33 !important; }
-@media (max-width: 720px) { .music-scene { height: calc(100dvh - 12rem); } .music-scene.training-active { height: calc(100dvh - 10rem); } .large-cover { width: min(26dvh, 100%); } }
+@media (max-width: 900px) { .now-playing-layout.with-training-panel { width: min(100%, 64rem); grid-template-columns: minmax(0, 1.5fr) minmax(15rem, 1fr); gap: 0.75rem; } }
+@media (max-width: 720px) { .music-scene { height: calc(100dvh - 12rem); } .now-playing-layout.with-training-panel { height: auto; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0.75rem; overflow-y: auto; } .now-playing-layout.with-training-panel .now-playing-page, .now-playing-layout.with-training-panel .training-side-panel { max-height: none; } .large-cover { width: min(26dvh, 100%); } }
 @media (max-width: 520px) { .now-playing-header { gap: 0.65rem; } .now-playing-header > a, .training-mode-toggle { height: 2.3rem; padding: 0.35rem 0.45rem; font-size: 0.7rem; } }
 @media (max-width: 520px) { .cover-volume-row { gap: 0.45rem; } .cover-volume-row .transport-button { width: 2.35rem; height: 2.35rem; padding: 0.25rem; } }
 @media (prefers-reduced-motion: reduce) { .bass-orb { transition: none; } }

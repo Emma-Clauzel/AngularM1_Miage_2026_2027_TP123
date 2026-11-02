@@ -1,4 +1,4 @@
-<div class="music-scene" [class.is-playing]="player.playing()" [class.training-active]="player.trainingMode()" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62">
+<div class="music-scene" [class.is-playing]="player.playing()" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62">
 <svg class="bass-orb" viewBox="0 0 500 500" aria-hidden="true" focusable="false"
   [style.transform]="'translate(-50%, -50%)'">
   <defs>
@@ -16,7 +16,8 @@
   <path class="bass-spikes" [attr.d]="spikePath()" fill="url(#bass-orb-gradient)" />
   <circle cx="250" cy="250" r="165" fill="url(#bass-orb-gradient)" opacity="0.58" />
 </svg>
-<section class="now-playing-page card" [class.training-mode]="player.trainingMode()" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62" aria-labelledby="now-playing-title">
+<div class="now-playing-layout" [class.with-training-panel]="player.trainingMode()">
+<section class="now-playing-page card" [style.--panel-alpha]="player.playing() ? 0.78 - player.bassLevel() * 0.25 : 0.62" aria-labelledby="now-playing-title">
   <div class="now-playing-header">
     <a routerLink="/tracks">&#8592; Retour &agrave; la biblioth&egrave;que</a>
     @if (player.currentTrack()) {
@@ -38,6 +39,9 @@
       <button type="button" class="transport-button volume-button" (click)="player.adjustVolume(1)" [disabled]="player.volume() >= 1" [attr.aria-label]="'Augmenter le volume, actuellement ' + Math.round(player.volume() * 100) + ' pour cent'" title="Augmenter le volume">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9v6h4l5 4V5L7 9H3Z"/><path d="M20 9v6m-3-3h6"/></svg>
       </button>
+      @if (player.volumeFeedback() !== null) {
+        <span class="volume-feedback" role="status" aria-live="polite">Volume {{ player.volumeFeedback() }} %</span>
+      }
     </div>
     <h2>{{ track.title }}</h2>
     <p>{{ track.artist || 'Artiste inconnu' }}@if (track.album) { · {{ track.album }} }</p>
@@ -76,42 +80,6 @@
     </div>
     </div>
     <div class="timeline"><span>{{ player.formatTime(player.currentTime()) }}</span><input type="range" min="0" [max]="player.duration() || 0" [value]="player.currentTime()" (input)="player.seek($event)" aria-label="Position dans le morceau" /><span>{{ player.formatTime(player.duration()) }}</span></div>
-    @if (player.trainingMode()) {
-      <section class="training-panel" aria-labelledby="training-title">
-        <h3 id="training-title">Mode entraînement</h3>
-        <label for="practice-speed">Vitesse de lecture</label>
-        <div class="speed-control">
-          <button type="button" class="speed-step-button" (click)="player.adjustPlaybackRate(-1)" [disabled]="player.playbackRate() <= 0.25" aria-label="Diminuer la vitesse" title="Vitesse précédente">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12l6 6M22 6l-6 6 6 6" /></svg>
-          </button>
-          <select id="practice-speed" [value]="player.playbackRate()" (change)="player.setPlaybackRate($event)">
-            <option value="0.25">×0,25</option>
-            <option value="0.5">×0,5</option>
-            <option value="0.75">×0,75</option>
-            <option value="1">×1</option>
-            <option value="1.25">×1,25</option>
-            <option value="1.5">×1,5</option>
-            <option value="1.75">×1,75</option>
-            <option value="2">×2</option>
-          </select>
-          <button type="button" class="speed-step-button" (click)="player.adjustPlaybackRate(1)" [disabled]="player.playbackRate() >= 2" aria-label="Augmenter la vitesse" title="Vitesse suivante">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6m-7-12 6 6-6 6" /></svg>
-          </button>
-        </div>
-        <div class="loop-control-row">
-          <div class="loop-marker">
-            <button type="button" class="marker-button" (click)="player.markLoopStart()" [disabled]="player.loading()" aria-label="Marquer le d&eacute;but du passage, point A">A</button>
-            <span>{{ player.loopStart() === null ? '&#8212;:&#8212;' : player.formatTime(player.loopStart() ?? 0) }}</span>
-          </div>
-          <button type="button" class="ab-loop-button" (click)="player.toggleLoopAB()" [disabled]="!player.canLoopAB()" [class.active-option]="player.loopABActive()" [attr.aria-pressed]="player.loopABActive()" [title]="player.loopABActive() ? 'D&eacute;sactiver la boucle A&#8211;B' : 'R&eacute;p&eacute;ter le passage A&#8211;B'">{{ player.loopABActive() ? 'Boucle A&#8211;B active' : 'R&eacute;p&eacute;ter A&#8211;B' }}</button>
-          <div class="loop-marker">
-            <button type="button" class="marker-button" (click)="player.markLoopEnd()" [disabled]="player.loading()" aria-label="Marquer la fin du passage, point B">B</button>
-            <span>{{ player.loopEnd() === null ? '&#8212;:&#8212;' : player.formatTime(player.loopEnd() ?? 0) }}</span>
-          </div>
-        </div>
-        <p class="training-help" aria-live="polite">{{ player.trainingMessage() || 'Place le morceau au début du passage, marque A, puis marque B à sa fin.' }}</p>
-      </section>
-    }
     @if (player.error()) { <p class="error" role="status">{{ player.error() }}</p> }
     <p class="queue-note">{{ player.queue().length }} piste(s) dans la sélection filtrée actuelle.</p>
   } @else {
@@ -119,4 +87,82 @@
     <p>Lancez un morceau depuis la bibliothèque pour le retrouver ici.</p>
   }
 </section>
+@if (player.trainingMode()) {
+  @if (player.currentTrack(); as track) {
+    <section class="training-panel training-side-panel card" aria-labelledby="training-title">
+      <h3 id="training-title">Mode entraînement</h3>
+      <label for="practice-speed">Vitesse de lecture</label>
+      <div class="speed-control">
+        <button type="button" class="speed-step-button" (click)="player.adjustPlaybackRate(-1)" [disabled]="player.playbackRate() <= 0.25" aria-label="Diminuer la vitesse" title="Vitesse précédente">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12l6 6M22 6l-6 6 6 6" /></svg>
+        </button>
+        <select id="practice-speed" [value]="player.playbackRate()" (change)="player.setPlaybackRate($event)">
+          <option value="0.25">×0,25</option>
+          <option value="0.5">×0,5</option>
+          <option value="0.75">×0,75</option>
+          <option value="1">×1</option>
+          <option value="1.25">×1,25</option>
+          <option value="1.5">×1,5</option>
+          <option value="1.75">×1,75</option>
+          <option value="2">×2</option>
+        </select>
+        <button type="button" class="speed-step-button" (click)="player.adjustPlaybackRate(1)" [disabled]="player.playbackRate() >= 2" aria-label="Augmenter la vitesse" title="Vitesse suivante">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6m-7-12 6 6-6 6" /></svg>
+        </button>
+      </div>
+      <div class="loop-control-row">
+        <div class="loop-marker">
+          <button type="button" class="marker-button" (click)="player.markLoopStart()" [disabled]="player.loading()" aria-label="Marquer le d&eacute;but du passage, point A">A</button>
+          <span>{{ player.loopStart() === null ? '&#8212;:&#8212;' : player.formatTime(player.loopStart() ?? 0) }}</span>
+        </div>
+        <button type="button" class="ab-loop-button" (click)="player.toggleLoopAB()" [disabled]="!player.canLoopAB()" [class.active-option]="player.loopABActive()" [attr.aria-pressed]="player.loopABActive()" [title]="player.loopABActive() ? 'D&eacute;sactiver la boucle A&#8211;B' : 'R&eacute;p&eacute;ter le passage A&#8211;B'">{{ player.loopABActive() ? 'Boucle A&#8211;B active' : 'R&eacute;p&eacute;ter A&#8211;B' }}</button>
+        <div class="loop-marker">
+          <button type="button" class="marker-button" (click)="player.markLoopEnd()" [disabled]="player.loading()" aria-label="Marquer la fin du passage, point B">B</button>
+          <span>{{ player.loopEnd() === null ? '&#8212;:&#8212;' : player.formatTime(player.loopEnd() ?? 0) }}</span>
+        </div>
+      </div>
+      <div class="practice-loop-editor">
+        <label for="practice-loop-name">Enregistrer ce passage</label>
+        <div class="practice-loop-save-row">
+          <input id="practice-loop-name" type="text" maxlength="60" [value]="practiceLoopName()" (input)="setPracticeLoopName($event)" placeholder="Ex. Intro, solo…" />
+          <button type="button" class="practice-loop-action" (click)="savePracticeLoop()" [disabled]="!player.canLoopAB() || !practiceLoopName().trim() || savingPracticeLoop() || player.loading()">
+            @if (savingPracticeLoop()) { Enregistrement… } @else { Enregistrer }
+          </button>
+        </div>
+      </div>
+      <div class="saved-practice-loops">
+        <h4>Passages enregistrés</h4>
+        @if (track.practiceLoops?.length) {
+          <ul>
+            @for (loop of track.practiceLoops; track loop.id) {
+              <li>
+                <span class="saved-practice-loop-details">
+                  @if (editingPracticeLoopId() === loop.id) {
+                    <input class="practice-loop-rename-input" type="text" maxlength="60" [value]="editingPracticeLoopName()" (input)="setEditingPracticeLoopName($event)" [attr.aria-label]="'Nom du passage ' + loop.name" />
+                  } @else { <strong>{{ loop.name }}</strong> }
+                  <small>{{ player.formatTime(loop.start) }} – {{ player.formatTime(loop.end) }}</small>
+                </span>
+                <span class="saved-practice-loop-actions">
+                  <button type="button" class="practice-loop-action" (click)="loadPracticeLoop(loop)" [disabled]="player.loading()" [attr.aria-label]="'Charger le passage ' + loop.name">Charger</button>
+                  @if (editingPracticeLoopId() === loop.id) {
+                    <button type="button" class="practice-loop-action" (click)="renamePracticeLoop(loop.id)" [disabled]="renamingPracticeLoopId() !== null">Enregistrer</button>
+                    <button type="button" class="practice-loop-action" (click)="cancelRenamePracticeLoop()" [disabled]="renamingPracticeLoopId() !== null">Annuler</button>
+                  } @else {
+                    <button type="button" class="practice-loop-action" (click)="startRenamePracticeLoop(loop)" [disabled]="renamingPracticeLoopId() !== null">Renommer</button>
+                  }
+                  <button type="button" class="practice-loop-delete" (click)="deletePracticeLoop(loop.id)" [disabled]="deletingPracticeLoopId() !== null" [attr.aria-label]="'Supprimer le passage ' + loop.name" [title]="'Supprimer ' + loop.name">×</button>
+                </span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="no-practice-loops">Aucun passage enregistré pour ce morceau.</p>
+        }
+      </div>
+      @if (practiceLoopError()) { <p class="practice-loop-error" role="alert">{{ practiceLoopError() }}</p> }
+      <p class="training-help" aria-live="polite">{{ player.trainingMessage() || 'Place le morceau au début du passage, marque A, puis marque B à sa fin.' }}</p>
+    </section>
+  }
+}
+</div>
 </div>

@@ -4,7 +4,7 @@
 .tracks-page .hero h1, .tracks-page .hero p { margin-block: 0.3rem; }
 .tracks-page .grid { display: grid; flex: 1 1 auto; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: 0.75rem; overflow: hidden; }
 .tracks-page .grid > .card { min-width: 0; margin: 0; }
-.upload-card { align-self: stretch; min-height: 0; overflow-y: auto; margin}
+.upload-card { align-self: stretch; min-height: 0; overflow-y: auto; margin: 0; }
 .library-card { display: flex; min-height: 0; flex-direction: column; overflow: hidden; }
 .library-card > .row, .library-card > .search-panel { flex: 0 0 auto; }
 .upload-card label { display: block; margin: 0.8rem 0 0.35rem; font-weight: 600; }

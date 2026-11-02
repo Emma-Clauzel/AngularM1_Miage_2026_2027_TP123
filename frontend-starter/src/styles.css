@@ -177,24 +177,37 @@ html.dark-theme .playback-options .option-button {
 html.dark-theme .playback-options button.active-option { color: white; background: var(--rose); }
 html.dark-theme .now-playing-page .transport-button,
 html.dark-theme .now-playing-page .playback-options .option-button,
-html.dark-theme .now-playing-page .training-panel .marker-button,
-html.dark-theme .now-playing-page .training-panel .speed-step-button,
-html.dark-theme .now-playing-page .training-panel .ab-loop-button {
+html.dark-theme .training-side-panel .marker-button,
+html.dark-theme .training-side-panel .speed-step-button,
+html.dark-theme .training-side-panel .ab-loop-button {
   color: #f4dce6;
   border-color: var(--rose-border);
   background-color: #533342;
 }
+html.dark-theme .training-side-panel { color: var(--text); border-color: var(--rose-border); background: rgb(53 36 45 / 92%); }
+html.dark-theme .training-side-panel h3 { color: #f4dce6; }
+html.dark-theme .training-side-panel select,
+html.dark-theme .training-side-panel .practice-loop-save-row input,
+html.dark-theme .training-side-panel .practice-loop-rename-input { color: #f7eaf0; border-color: #93677b; background: #38252f; }
+html.dark-theme .training-side-panel .practice-loop-action,
+html.dark-theme .training-side-panel .practice-loop-delete { color: #f7eaf0; border-color: #e8abc2; background: #4a303d; }
+html.dark-theme .training-side-panel .practice-loop-action:hover:not(:disabled),
+html.dark-theme .training-side-panel .practice-loop-delete:hover:not(:disabled) { background: #704858; }
+html.dark-theme .training-side-panel .saved-practice-loops li { border-color: #8b6376; }
+html.dark-theme .training-side-panel .saved-practice-loop-details small,
+html.dark-theme .training-side-panel .no-practice-loops,
+html.dark-theme .training-side-panel .loop-marker span { color: #cfb7c2; }
 html.dark-theme .now-playing-page .transport-button.is-playing { background-color: #704858; }
 html.dark-theme .now-playing-page .playback-options .option-button.active-option,
-html.dark-theme .now-playing-page .training-panel .ab-loop-button.active-option {
+html.dark-theme .training-side-panel .ab-loop-button.active-option {
   color: white;
   background-color: var(--rose);
 }
 html.dark-theme .now-playing-page .transport-button:hover:not(:disabled),
 html.dark-theme .now-playing-page .playback-options .option-button:hover:not(.active-option),
-html.dark-theme .now-playing-page .training-panel .marker-button:hover:not(:disabled),
-html.dark-theme .now-playing-page .training-panel .speed-step-button:hover:not(:disabled),
-html.dark-theme .now-playing-page .training-panel .ab-loop-button:not(.active-option):hover:not(:disabled) {
+html.dark-theme .training-side-panel .marker-button:hover:not(:disabled),
+html.dark-theme .training-side-panel .speed-step-button:hover:not(:disabled),
+html.dark-theme .training-side-panel .ab-loop-button:not(.active-option):hover:not(:disabled) {
   background-color: #704858;
 }
 html.dark-theme .now-playing-page .transport-button:disabled {
@@ -203,7 +216,7 @@ html.dark-theme .now-playing-page .transport-button:disabled {
   background-color: #533342;
 }
 html.dark-theme .now-playing-page .playback-options .option-button.active-option:hover,
-html.dark-theme .now-playing-page .training-panel .ab-loop-button.active-option:hover { background-color: var(--rose-hover); }
+html.dark-theme .training-side-panel .ab-loop-button.active-option:hover { background-color: var(--rose-hover); }
 html.dark-theme .now-playing-cover-link,
 html.dark-theme .mini-cover-placeholder,
 html.dark-theme .cover-placeholder { color: #e8abc2; background-color: #4a303d; }

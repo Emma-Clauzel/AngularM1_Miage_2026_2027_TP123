@@ -125,7 +125,7 @@
                   </button>
                   @if (track.tags?.length) {
                     <div class="track-tags" [attr.aria-label]="'Tags de ' + track.title">
-                      @for (tag of track.tags ?? []; track tag.id) {
+                      @for (tag of track.tags; track tag.id) {
                         <span class="track-tag" [style.backgroundColor]="tag.color"><span aria-hidden="true">{{ tagSymbol(tag.icon) }}</span> {{ tag.name }}</span>
                       }
                     </div>

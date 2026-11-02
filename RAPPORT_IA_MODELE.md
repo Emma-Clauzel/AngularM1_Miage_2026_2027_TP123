@@ -250,3 +250,49 @@ Pour chaque mission, consigner l'objectif, le prompt principal, le plan, les vé
 - **Fichiers modifiés :** `backend/src/models/Track.js` et `backend/src/app.js` (champ, sérialisation et route); `frontend-starter/src/app/shared/models/track.model.ts`, `frontend-starter/src/app/shared/services/track.service.ts`, `frontend-starter/src/app/components/tracks-page/tracks-page.ts`, `tracks-page.html` et `tracks-page.css`; `frontend-starter/src/styles.css` (couleur de l’étoile adaptée aux thèmes clair et sombre).
 - **Vérification :** aucune compilation ni vérification manuelle n’a été lancée pour cette modification. Redémarrer le backend si nécessaire, puis vérifier l’ajout/retrait d’un favori, sa conservation après rechargement, le filtre, le changement de compte et le rendu des deux thèmes.
 - **Ce que chaque membre sait maintenant expliquer sans l’agent :** comment l’état favori est persisté en base, comment la route protège les données par propriétaire et comment le filtre dérive la liste affichée sans supprimer les pistes de la bibliothèque.
+
+### Règles de longueur à la création d’un compte
+
+- **Demande :** exiger au moins 8 caractères pour l’email et le mot de passe, tout en acceptant un nom d’un seul caractère.
+- **Changements :** le formulaire applique les longueurs minimales, affiche des messages lorsque les champs sont invalides et empêche l’envoi tant que les règles ne sont pas respectées. Le backend vérifie également les champs reçus, retire les espaces autour du nom et de l’email, contrôle le format de l’adresse, et le schéma utilisateur accepte désormais un nom d’un caractère.
+- **Fichiers modifiés :** `frontend-starter/src/app/components/register-page/register-page.ts` et `.html`; `backend/src/app.js`; `backend/src/models/User.js`.
+- **Vérification :** aucune compilation ni vérification manuelle n’a été lancée. Vérifier l’inscription avec un nom d’un caractère, un email valide de 8 caractères minimum et un mot de passe de 8 caractères minimum, puis essayer les valeurs trop courtes.
+- **Ce que chaque membre sait maintenant expliquer sans l’agent :** pourquoi les contrôles du formulaire améliorent le retour à l’utilisateur et pourquoi l’API répète les validations même si le frontend les applique déjà.
+
+### Unicité des noms de compte
+
+- **Demande :** empêcher plusieurs comptes d’utiliser le même nom.
+- **Changements :** l’inscription et la modification du profil vérifient qu’aucun autre compte n’a déjà ce nom. La comparaison ignore la casse et les espaces extérieurs. Une clé normalisée et un index unique MongoDB protègent aussi contre deux créations simultanées; les conflits sont renvoyés avec le statut HTTP 409 et un message explicite.
+- **Fichiers modifiés :** `backend/src/models/User.js` (clé normalisée et index unique); `backend/src/app.js` (vérification à l’inscription et à la modification du profil, gestion des conflits).
+- **Vérification :** aucune vérification automatisée ou manuelle n’a été lancée. Tester deux inscriptions avec le même nom, une différence de casse, puis la tentative de renommer un compte avec le nom d’un autre. Vérifier aussi que le compte peut conserver son propre nom.
+- **Ce que chaque membre sait maintenant expliquer sans l’agent :** pourquoi une vérification applicative seule ne protège pas contre deux requêtes simultanées et comment l’index unique MongoDB complète cette vérification.
+
+### Désactivation du préremplissage sur la page d’inscription
+
+- **Demande :** empêcher les champs du formulaire d’inscription de se remplir automatiquement avec les identifiants de démonstration lors de l’ouverture ou du rechargement de la page.
+- **Constat et changements :** les contrôles Angular étaient initialisés avec des valeurs vides; le préremplissage venait donc probablement de l’autocomplétion du navigateur ou de son gestionnaire de mots de passe. Le formulaire et les champs nom/email utilisent maintenant `autocomplete="off"`, des noms propres à l’inscription, et le mot de passe utilise `autocomplete="new-password"`.
+- **Fichier modifié :** `frontend-starter/src/app/components/register-page/register-page.html`.
+- **Vérification :** aucune vérification manuelle n’a été lancée. Recharger la page register et confirmer que les champs restent vides; certains gestionnaires de mots de passe peuvent toutefois ignorer les consignes d’autocomplétion du navigateur.
+
+## Amélioration — Passages A–B enregistrés par morceau
+
+- **Demande :** enregistrer plusieurs passages d’entraînement pour un morceau, avec un nom, afin de les retrouver sans replacer les marqueurs A et B.
+- **Fonctionnement :** une fois A et B définis, le lecteur permet de saisir un nom et de sauvegarder le passage. La liste du morceau affiche chaque nom et ses temps; « Charger » replace la lecture au début et active la boucle. « Renommer » modifie le nom sans toucher aux positions et la croix supprime le passage. Les passages sont embarqués dans le document MongoDB de leur piste. L’API exige l’authentification, vérifie le propriétaire de la piste, les positions et le nom. La durée audio est extraite des métadonnées à l’import lorsqu’elle est disponible et sert à refuser un passage qui dépasse le morceau.
+- **Routes :** `POST /api/tracks/:id/practice-loops` pour créer; `PATCH /api/tracks/:id/practice-loops/:loopId` pour renommer; `DELETE /api/tracks/:id/practice-loops/:loopId` pour supprimer. Les réponses renvoient les passages à jour.
+- **Fichiers modifiés :** `backend/src/models/Track.js` et `backend/src/app.js`; `frontend-starter/src/app/shared/models/track.model.ts`, `shared/services/track.service.ts`, `shared/services/music-player.service.ts`, `components/now-playing-page/now-playing-page.ts`, `.html` et `.css`; `frontend-starter/src/styles.css`; `API_CONTRACT.md`. Une déclaration CSS incomplète déjà présente dans `tracks-page.css` a également été corrigée après avoir été signalée pendant la compilation.
+- **Vérifications :** `npm.cmd run build` frontend réussi le 2 novembre 2026. `node --check` a réussi pour `backend/src/app.js` et `backend/src/models/Track.js`. Aucun test automatisé ni parcours MongoDB/navigateur n’a été exécuté. Il reste à vérifier manuellement la création, le chargement, le renommage, la suppression, le maintien de la pause et l’isolation entre comptes.
+- **Ce que chaque membre sait maintenant expliquer sans l’agent :** comment un sous-document de passage reste lié à une piste, comment les routes limitent les opérations au propriétaire, et comment les secondes enregistrées restaurent les marqueurs du lecteur.
+
+## Amélioration — Retour visuel du volume
+
+- **Demande :** afficher brièvement le pourcentage du volume après une action pour le monter ou le baisser.
+- **Changements :** le lecteur expose le niveau du volume en pourcentage après chaque clic. Une pastille accessible apparaît près des commandes, se met à jour lors de clics rapprochés et disparaît après environ une seconde. Le niveau reste limité entre 0 et 100 %.
+- **Fichiers modifiés :** `frontend-starter/src/app/shared/services/music-player.service.ts`, `frontend-starter/src/app/components/now-playing-page/now-playing-page.html` et `.css`.
+- **Vérification :** compilation Angular réussie le 2 novembre 2026; le rendu et le délai de disparition restent à vérifier dans le navigateur. Aucun test automatisé n’a été lancé.
+
+## Ajustement — Présentation du mode entraînement
+
+- **Demande :** conserver la taille et la disposition normales du lecteur en mode entraînement, puis placer les commandes d’entraînement dans un second encadré à droite.
+- **Changements :** suppression des règles CSS qui compactaient la pochette, les contrôles et la timeline lorsque le mode entraînement est actif. La page utilise maintenant une disposition à deux colonnes : lecteur inchangé à gauche et encadré du mode entraînement à droite. Sur les écrans étroits, les encadrés s’empilent pour conserver une largeur de commandes utilisable. Les couleurs du nouvel encadré suivent le thème sombre.
+- **Fichiers modifiés :** `frontend-starter/src/app/components/now-playing-page/now-playing-page.html` et `.css`; `frontend-starter/src/styles.css`.
+- **Vérification :** `npm.cmd run build` frontend réussi le 2 novembre 2026. Le rendu sans défilement reste à vérifier dans le navigateur, sur grand écran et sur écran étroit.

@@ -14,6 +14,7 @@ export class MusicPlayerService {
   private waveformData?: Uint8Array<ArrayBuffer>;
   private bassFrame = 0;
   private lastBassUpdate = 0;
+  private volumeFeedbackTimeout?: ReturnType<typeof setTimeout>;
   private audioUrl = '';
   private coverUrl = '';
   private requestId = 0;
@@ -22,6 +23,7 @@ export class MusicPlayerService {
   readonly loading = signal(false);
   readonly playing = signal(false);
   readonly volume = signal(1);
+  readonly volumeFeedback = signal<number | null>(null);
   readonly error = signal('');
   readonly cover = signal('');
   readonly currentTime = signal(0);
@@ -103,6 +105,12 @@ export class MusicPlayerService {
     const nextVolume = Math.max(0, Math.min(1, Math.round((this.volume() + step * 0.1) * 10) / 10));
     this.volume.set(nextVolume);
     if (this.audio) this.audio.volume = nextVolume;
+    this.volumeFeedback.set(Math.round(nextVolume * 100));
+    if (this.volumeFeedbackTimeout) clearTimeout(this.volumeFeedbackTimeout);
+    this.volumeFeedbackTimeout = setTimeout(() => {
+      this.volumeFeedback.set(null);
+      this.volumeFeedbackTimeout = undefined;
+    }, 1100);
   }
   toggleShuffle(): void {
     this.shuffle.update((enabled) => !enabled);
@@ -184,6 +192,24 @@ export class MusicPlayerService {
     this.loopEnd.set(end);
     this.loopABActive.set(true);
     this.trainingMessage.set('Boucle A–B activée.');
+  }
+  loadPracticeLoop(loop: { name: string; start: number; end: number }): void {
+    if (!Number.isFinite(loop.start) || !Number.isFinite(loop.end) || loop.start < 0 || loop.end <= loop.start) {
+      this.trainingMessage.set('Ce passage enregistré contient des positions invalides.');
+      return;
+    }
+    if (this.duration() > 0 && loop.end > this.duration()) {
+      this.trainingMessage.set('Ce passage dépasse la durée du morceau. Redéfinis les points A et B.');
+      return;
+    }
+    this.loopStart.set(loop.start);
+    this.loopEnd.set(loop.end);
+    this.loopABActive.set(true);
+    if (this.audio) {
+      this.audio.currentTime = loop.start;
+      this.currentTime.set(loop.start);
+    }
+    this.trainingMessage.set(`Passage « ${loop.name} » chargé et boucle activée.`);
   }
   toggleLoopAB(): void {
     if (!this.canLoopAB()) {
